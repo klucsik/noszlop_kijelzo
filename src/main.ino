@@ -1,16 +1,16 @@
 static String name = "noszlop_kijelzo"; //to csiraztato
-static String ver = "0_4"; //diff to 0_3: alarm kiírja a message-t is, https client insecure 
+static String ver = "0_5";              //diff to 0_4: kijelző pontosítások
 
 //////////////////////////////////////////////
 ////////////CONFIG////////////////////////////
 #include "secrets.h"
 Secrets sec;
-const char* csir_homerseklet;
+float csir_homerseklet;
 int csir_last_on;
-int network_timeout=0;
-int  csir_timeout=3;
-int pinginterval=1;
-int update_interval=5;
+int network_timeout = 0;
+int csir_timeout = 3;
+int pinginterval = 1;
+int update_interval = 5;
 const uint8_t Googlefingerprint[20] = {0x63, 0x92, 0xD6, 0x31, 0x89, 0x30, 0x9B, 0x7A, 0x94, 0x33, 0x71, 0x67, 0xB5, 0x9F, 0xDE, 0x99, 0x69, 0xA1, 0x88, 0xF7};
 const uint8_t Discordfingerprint[20] = {0x2D, 0x08, 0xE9, 0x2D, 0x0A, 0x54, 0x5A, 0xD5, 0xB4, 0x0A, 0x57, 0xF6, 0x68, 0x85, 0x1A, 0x79, 0x52, 0xE1, 0xFA, 0x65};
 const String update_server = sec.update_server;
@@ -39,7 +39,6 @@ WiFiClient client;
 
 LiquidCrystal_PCF8574 lcd(0x27); // set the LCD address to 0x27 for a 16 chars and 2 line display
 
-
 //////////////////////////////////////////////
 ////////////SETUP ////////////////////////////
 void setup()
@@ -54,7 +53,6 @@ void setup()
   lcd.setBacklight(0);
   delay(400);
   lcd.setBacklight(255);
-
 
   USE_SERIAL.begin(115200);
   USE_SERIAL.setDebugOutput(true);
@@ -73,7 +71,6 @@ void setup()
   discordPost("startup: " + name + " " + ver);
 
   updateFunc(name, ver);
-
 }
 
 ////////////SETUP ////////////////////////////
@@ -92,7 +89,8 @@ void loop()
   kijelzo();
   Serial.print("----last on: ");
   Serial.println(csir_last_on);
-  if(csir_last_on > csir_timeout){
+  if (csir_last_on > csir_timeout)
+  {
     alarm("nem latom a csiraztatot");
   }
 
@@ -102,7 +100,8 @@ void loop()
     j = 0;
     updateFunc(name, ver);
   }
-  if(network_timeout>5) alarm("net hiba");
+  if (network_timeout > 5)
+    alarm("net hiba");
 }
 
 ////////////LOOP ////////////////////////////
@@ -110,20 +109,21 @@ void loop()
 
 /////////////////////////////////////////////
 ////////////KIJELZO//////////////////////////
-void kijelzo(){
+void kijelzo()
+{
   lcd.setBacklight(255);
   lcd.clear();
   lcd.setCursor(0, 0);
-  lcd.print("csiraztato hom: ");
+  lcd.print("csiraztato: ");
   lcd.print(csir_homerseklet);
+  lcd.print("C");
   lcd.setCursor(0, 1);
-  lcd.print("utoljara aktiv: ");
+  lcd.print("utol. aktiv(mp): ");
   lcd.print(csir_last_on);
-  lcd.print(" mp-e");
-
 }
 
-void alarm(String message){
+void alarm(String message)
+{
   Serial.println("alarm: " + message);
   lcd.setBacklight(255);
   lcd.clear();
@@ -141,7 +141,6 @@ void alarm(String message){
   lcd.setBacklight(0);
   delay(400);
   lcd.setBacklight(255);
-
 }
 
 ////////////KIJELZO///////////////////////
@@ -400,11 +399,11 @@ void getdata()
   network_timeout++;
   if (response.length() > 1)
   {
-    network_timeout=0;
+    network_timeout = 0;
     deserializeJson(doc, response);
 
-   csir_homerseklet = doc["csir_homerseklet"];
-  csir_last_on = doc["csir_last_on"];
+    csir_homerseklet = doc["csir_homerseklet"];
+    csir_last_on = doc["csir_last_on"];
 
     Serial.println("data got: csir_homerseklet =" + String(csir_homerseklet));
   }
