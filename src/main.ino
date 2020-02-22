@@ -7,8 +7,14 @@ static String ver = "0_5";              //diff to 0_4: kijelző pontosítások
 Secrets sec;
 float csir_homerseklet;
 int csir_last_on;
+int csir_timeout = 300;
+
+float uhaz_homerseklet=100;
+float noszlop_uveghaz_alarm = 2;
+int uhaz_last_on;
+int uhaz_timeout =300;
+
 int network_timeout = 0;
-int csir_timeout = 3;
 int pinginterval = 1;
 int update_interval = 5;
 const uint8_t Googlefingerprint[20] = {0x63, 0x92, 0xD6, 0x31, 0x89, 0x30, 0x9B, 0x7A, 0x94, 0x33, 0x71, 0x67, 0xB5, 0x9F, 0xDE, 0x99, 0x69, 0xA1, 0x88, 0xF7};
@@ -48,12 +54,12 @@ void setup()
   lcd.setBacklight(255);
   lcd.home();
   lcd.clear();
-  lcd.print("Hello LCD");
+  lcd.print("Hello!");
   delay(1000);
   lcd.setBacklight(0);
   delay(400);
   lcd.setBacklight(255);
-
+  alarm("Teszt riasztas!");
   USE_SERIAL.begin(115200);
   USE_SERIAL.setDebugOutput(true);
   USE_SERIAL.println();
@@ -61,8 +67,10 @@ void setup()
   USE_SERIAL.println(name);
   USE_SERIAL.print("ver: ");
   USE_SERIAL.println(ver);
-
+  lcd.clear();
+  lcd.print("mindjart kesz...");
   WiFiManager wifiManager;
+  wifiManager.setTimeout(30);
   wifiManager.autoConnect("mocsigoncska_ap");
   Serial.println("connected...yeey :)");
   delay(1000);
@@ -87,12 +95,32 @@ void loop()
   getdata();
   getconfig();
   kijelzo();
-  Serial.print("----last on: ");
+  Serial.print("----csir last on: ");
   Serial.println(csir_last_on);
   if (csir_last_on > csir_timeout)
   {
-    alarm("nem latom a csiraztatot");
+    alarm("nem latom a csiraztatot!");
   }
+
+  Serial.print("----uhaz hom: ");
+  Serial.print(uhaz_homerseklet);
+  Serial.print(" -- treshold: ");
+  Serial.println(noszlop_uveghaz_alarm);
+  if (uhaz_homerseklet < noszlop_uveghaz_alarm)
+  {
+    alarm("Hideg!" + String(uhaz_homerseklet));
+  }
+
+  Serial.print("----uhaz last on: ");
+  Serial.print(uhaz_last_on);
+  Serial.print(" -- treshold: ");
+  Serial.println(uhaz_timeout);
+  if (uhaz_last_on > uhaz_timeout)
+  {
+    alarm("nem latom az uveghazat!");
+  }
+
+
 
   j++;
   if (j > update_interval)
@@ -114,22 +142,26 @@ void kijelzo()
   lcd.setBacklight(255);
   lcd.clear();
   lcd.setCursor(0, 0);
-  lcd.print("csiraztato: ");
+  lcd.print("csir: ");
   lcd.print(csir_homerseklet);
   lcd.print("C");
-  lcd.setCursor(0, 1);
-  lcd.print("utol. aktiv(mp): ");
-  lcd.print(csir_last_on);
+
+  lcd.setCursor(0, 2);
+  lcd.print("uhaz: ");
+  lcd.print(uhaz_homerseklet);
+  lcd.print("C");
+
 }
 
 void alarm(String message)
 {
+  tone(D8,1800,1000);
   Serial.println("alarm: " + message);
   lcd.setBacklight(255);
   lcd.clear();
-  lcd.setCursor(0, 3);
-  lcd.print("!JUJUJ!");
-  lcd.setCursor(0, 4);
+  lcd.setCursor(0, 0);
+  lcd.print("     !JUJUJ!");
+  lcd.setCursor(0, 1);
   lcd.print(message);
   lcd.setBacklight(0);
   delay(400);
@@ -141,6 +173,7 @@ void alarm(String message)
   lcd.setBacklight(0);
   delay(400);
   lcd.setBacklight(255);
+  tone(D8,1500,4000);
 }
 
 ////////////KIJELZO///////////////////////
@@ -385,14 +418,14 @@ String POSTTask(String url, const uint8_t Fingeprint[20], String payload)
 //////////////////////////////////////////////
 ////////////GETCONFIG/////////////////////////
 
-const size_t capacity = JSON_OBJECT_SIZE(4) + 60;
+const size_t capacity = JSON_OBJECT_SIZE(6) + 700;
 DynamicJsonDocument doc(capacity);
 
 void getdata()
 {
   String baseurl = String(F("https://script.google.com/macros/s/")) + String(GScriptId) + "/exec?";
 
-  String params = "csir_homerseklet=0&csir_last_on=0"; //ezt piffmanből a legegyszerűbb
+  String params = "csir_homerseklet=0&csir_last_on=0&uhaz_homerseklet=0&uhaz_last_on=0"; //ezt piffmanből a legegyszerűbb
 
   String url = baseurl + params;
   String response = GETTask(url, Googlefingerprint, 1000);
@@ -404,6 +437,8 @@ void getdata()
 
     csir_homerseklet = doc["csir_homerseklet"];
     csir_last_on = doc["csir_last_on"];
+    uhaz_homerseklet = doc["uhaz_homerseklet"];
+    uhaz_last_on = doc["uhaz_last_on"];
 
     Serial.println("data got: csir_homerseklet =" + String(csir_homerseklet));
   }
@@ -413,7 +448,7 @@ void getconfig()
 {
   String baseurl = String(F("https://script.google.com/macros/s/")) + String(GScriptId) + "/exec?";
 
-  String params = "update_interval=0&pinginterval=0&csir_timeout=0"; //ezt piffmanből a legegyszerűbb
+  String params = "update_interval=0&pinginterval=0&csir_timeout=0&noszlop_uveghaz_alarm=0&uhaz_timeout=0"; //ezt piffmanből a legegyszerűbb
 
   String url = baseurl + params;
   String response = GETTask(url, Googlefingerprint, 1000);
@@ -421,12 +456,18 @@ void getconfig()
   if (response.length() > 1)
   {
     deserializeJson(doc, response);
-
+    noszlop_uveghaz_alarm = doc["noszlop_uveghaz_alarm"];
     pinginterval = doc["pinginterval"];
     update_interval = doc["update_interval"];
     csir_timeout = doc["csir_timeout"];
-
-    Serial.println("Config got: pinginterval =" + String(pinginterval));
+    uhaz_timeout = doc["uhaz_timeout"];
+  
+    Serial.println("Config got:");
+    Serial.print("noszlop_uveghaz_alarm =" + String(noszlop_uveghaz_alarm));
+    Serial.print("pinginterval =" + String(pinginterval));
+    Serial.print("update_interval =" + String(update_interval));
+    Serial.print("csir_timeout =" + String(csir_timeout));
+    Serial.print("uhaz_timeout =" + String(uhaz_timeout));
   }
 }
 
