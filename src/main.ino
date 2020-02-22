@@ -1,5 +1,5 @@
 static String name = "noszlop_kijelzo"; //to csiraztato
-static String ver = "0_5";              //diff to 0_4: kijelző pontosítások
+static String ver = "1_0";              //diff to 0_4: kijelző pontosítások
 
 //////////////////////////////////////////////
 ////////////CONFIG////////////////////////////
