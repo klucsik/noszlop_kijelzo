@@ -1,5 +1,5 @@
 static String name = "noszlop_kijelzo"; //to csiraztato
-static String ver = "1_0";              //diff to 0_4: kijelző pontosítások
+static String ver = "1_1";              //diff to 0_4: kijelző pontosítások
 
 //////////////////////////////////////////////
 ////////////CONFIG////////////////////////////
@@ -13,6 +13,12 @@ float uhaz_homerseklet=100;
 float noszlop_uveghaz_alarm = 2;
 int uhaz_last_on;
 int uhaz_timeout =300;
+
+float inkub_homerseklet=100;
+float noszlop_inkub_alarm = 2;
+int inkub_last_on;
+int inkub_timeout =300;
+
 
 int network_timeout = 0;
 int pinginterval = 1;
@@ -106,10 +112,21 @@ void loop()
   Serial.print(uhaz_homerseklet);
   Serial.print(" -- treshold: ");
   Serial.println(noszlop_uveghaz_alarm);
+
   if (uhaz_homerseklet < noszlop_uveghaz_alarm)
   {
-    alarm("Hideg!" + String(uhaz_homerseklet));
+    alarm("Uhaz Hideg!" + String(uhaz_homerseklet));
   }
+
+  Serial.print("----inkub hom: ");
+  Serial.print(inkub_homerseklet);
+  Serial.print(" -- treshold: ");
+  Serial.println(noszlop_inkub_alarm);
+
+  if (inkub_homerseklet < noszlop_inkub_alarm)
+  {
+    alarm("Inkub Hideg!" + String(inkub_homerseklet));
+  }  
 
   Serial.print("----uhaz last on: ");
   Serial.print(uhaz_last_on);
@@ -118,6 +135,15 @@ void loop()
   if (uhaz_last_on > uhaz_timeout)
   {
     alarm("nem latom az uveghazat!");
+  }
+
+  Serial.print("----inkub last on: ");
+  Serial.print(inkub_last_on);
+  Serial.print(" -- treshold: ");
+  Serial.println(inkub_timeout);
+  if (inkub_last_on > inkub_timeout)
+  {
+    alarm("nem latom az Inkubátort!");
   }
 
 
@@ -147,6 +173,11 @@ void kijelzo()
   lcd.print("C");
 
   lcd.setCursor(0, 2);
+  lcd.print("inkub: ");
+  lcd.print(inkub_homerseklet);
+  lcd.print("C");
+
+  lcd.setCursor(0, 3);
   lcd.print("uhaz: ");
   lcd.print(uhaz_homerseklet);
   lcd.print("C");
@@ -418,14 +449,14 @@ String POSTTask(String url, const uint8_t Fingeprint[20], String payload)
 //////////////////////////////////////////////
 ////////////GETCONFIG/////////////////////////
 
-const size_t capacity = JSON_OBJECT_SIZE(6) + 700;
+const size_t capacity = JSON_OBJECT_SIZE(6) + 800;
 DynamicJsonDocument doc(capacity);
 
 void getdata()
 {
   String baseurl = String(F("https://script.google.com/macros/s/")) + String(GScriptId) + "/exec?";
 
-  String params = "csir_homerseklet=0&csir_last_on=0&uhaz_homerseklet=0&uhaz_last_on=0"; //ezt piffmanből a legegyszerűbb
+  String params = "csir_homerseklet=0&csir_last_on=0&uhaz_homerseklet=0&uhaz_last_on=0&inkub_homerseklet=0&inkub_last_on=0; //ezt piffmanből a legegyszerűbb
 
   String url = baseurl + params;
   String response = GETTask(url, Googlefingerprint, 1000);
@@ -439,7 +470,8 @@ void getdata()
     csir_last_on = doc["csir_last_on"];
     uhaz_homerseklet = doc["uhaz_homerseklet"];
     uhaz_last_on = doc["uhaz_last_on"];
-
+    inkub_homerseklet = doc["inkub_homerseklet"];
+    inkub_last_on = doc["inkub_last_on"];
     Serial.println("data got: csir_homerseklet =" + String(csir_homerseklet));
   }
 }
