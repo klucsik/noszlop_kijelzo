@@ -1,5 +1,5 @@
-static String name = "noszlop_kijelzo"; //to csiraztato
-static String ver = "1_1";              //diff to 0_4: kijelző pontosítások
+static String name = "noszlop_kijelzo_teszt"; //to csiraztato
+static String ver = "1_3";                    //diff to 1_2: riasztások konfigból való kapcsolása
 
 //////////////////////////////////////////////
 ////////////CONFIG////////////////////////////
@@ -8,17 +8,19 @@ Secrets sec;
 float csir_homerseklet;
 int csir_last_on;
 int csir_timeout = 300;
+boolean csir_alarm_on = true;
 
-float uhaz_homerseklet=100;
+float uhaz_homerseklet = 100;
 float noszlop_uveghaz_alarm = 2;
 int uhaz_last_on;
-int uhaz_timeout =300;
+int uhaz_timeout = 300;
+boolean uhaz_alarm_on = true;
 
-float inkub_homerseklet=100;
+float inkub_homerseklet = 100;
 float noszlop_inkub_alarm = 2;
 int inkub_last_on;
-int inkub_timeout =300;
-
+int inkub_timeout = 300;
+boolean inkub_alarm_on = true;
 
 int network_timeout = 0;
 int pinginterval = 1;
@@ -103,9 +105,37 @@ void loop()
   kijelzo();
   Serial.print("----csir last on: ");
   Serial.println(csir_last_on);
-  if (csir_last_on > csir_timeout)
+
+  if (csir_alarm_on == true)
   {
-    alarm("nem latom a csiraztatot!");
+    if (csir_last_on > csir_timeout)
+    {
+      alarm("nem latom a csiraztatot!");
+    }
+  }
+
+  if (uhaz_alarm_on == true)
+  {
+    if (uhaz_homerseklet < noszlop_uveghaz_alarm)
+    {
+      alarm("Uhaz Hideg!" + String(uhaz_homerseklet));
+    }
+    if (uhaz_last_on > uhaz_timeout)
+    {
+      alarm("nem latom az uveghazat!");
+    }
+  }
+
+  if (inkub_alarm_on == true)
+  {
+    if (inkub_homerseklet < noszlop_inkub_alarm)
+    {
+      alarm("Inkub Hideg!" + String(inkub_homerseklet));
+    }
+    if (inkub_last_on > inkub_timeout)
+    {
+      alarm("nem latom az Inkubátort!");
+    }
   }
 
   Serial.print("----uhaz hom: ");
@@ -113,40 +143,20 @@ void loop()
   Serial.print(" -- treshold: ");
   Serial.println(noszlop_uveghaz_alarm);
 
-  if (uhaz_homerseklet < noszlop_uveghaz_alarm)
-  {
-    alarm("Uhaz Hideg!" + String(uhaz_homerseklet));
-  }
-
   Serial.print("----inkub hom: ");
   Serial.print(inkub_homerseklet);
   Serial.print(" -- treshold: ");
   Serial.println(noszlop_inkub_alarm);
 
-  if (inkub_homerseklet < noszlop_inkub_alarm)
-  {
-    alarm("Inkub Hideg!" + String(inkub_homerseklet));
-  }  
-
   Serial.print("----uhaz last on: ");
   Serial.print(uhaz_last_on);
   Serial.print(" -- treshold: ");
   Serial.println(uhaz_timeout);
-  if (uhaz_last_on > uhaz_timeout)
-  {
-    alarm("nem latom az uveghazat!");
-  }
 
   Serial.print("----inkub last on: ");
   Serial.print(inkub_last_on);
   Serial.print(" -- treshold: ");
   Serial.println(inkub_timeout);
-  if (inkub_last_on > inkub_timeout)
-  {
-    alarm("nem latom az Inkubátort!");
-  }
-
-
 
   j++;
   if (j > update_interval)
@@ -181,12 +191,11 @@ void kijelzo()
   lcd.print("uhaz: ");
   lcd.print(uhaz_homerseklet);
   lcd.print("C");
-
 }
 
 void alarm(String message)
 {
-  tone(D8,1800,1000);
+  tone(D8, 1800, 1000);
   Serial.println("alarm: " + message);
   lcd.setBacklight(255);
   lcd.clear();
@@ -204,7 +213,7 @@ void alarm(String message)
   lcd.setBacklight(0);
   delay(400);
   lcd.setBacklight(255);
-  tone(D8,1500,4000);
+  tone(D8, 1500, 4000);
 }
 
 ////////////KIJELZO///////////////////////
@@ -456,7 +465,7 @@ void getdata()
 {
   String baseurl = String(F("https://script.google.com/macros/s/")) + String(GScriptId) + "/exec?";
 
-  String params = "csir_homerseklet=0&csir_last_on=0&uhaz_homerseklet=0&uhaz_last_on=0&inkub_homerseklet=0&inkub_last_on=0; //ezt piffmanből a legegyszerűbb
+  String params = "csir_homerseklet=0&csir_last_on=0&uhaz_homerseklet=0&uhaz_last_on=0&inkub_homerseklet=0&inkub_last_on=0"; //ezt piffmanből a legegyszerűbb
 
   String url = baseurl + params;
   String response = GETTask(url, Googlefingerprint, 1000);
@@ -468,10 +477,13 @@ void getdata()
 
     csir_homerseklet = doc["csir_homerseklet"];
     csir_last_on = doc["csir_last_on"];
+
     uhaz_homerseklet = doc["uhaz_homerseklet"];
     uhaz_last_on = doc["uhaz_last_on"];
+
     inkub_homerseklet = doc["inkub_homerseklet"];
     inkub_last_on = doc["inkub_last_on"];
+
     Serial.println("data got: csir_homerseklet =" + String(csir_homerseklet));
   }
 }
@@ -480,7 +492,7 @@ void getconfig()
 {
   String baseurl = String(F("https://script.google.com/macros/s/")) + String(GScriptId) + "/exec?";
 
-  String params = "update_interval=0&pinginterval=0&csir_timeout=0&noszlop_uveghaz_alarm=0&uhaz_timeout=0"; //ezt piffmanből a legegyszerűbb
+  String params = "update_interval=0&pinginterval=0&csir_timeout=0&noszlop_uveghaz_alarm=0&uhaz_timeout=0&inkub_alarm_on=0&uhaz_alarm_on=0&csir_alarm_on=0"; //ezt piffmanből a legegyszerűbb
 
   String url = baseurl + params;
   String response = GETTask(url, Googlefingerprint, 1000);
@@ -493,13 +505,20 @@ void getconfig()
     update_interval = doc["update_interval"];
     csir_timeout = doc["csir_timeout"];
     uhaz_timeout = doc["uhaz_timeout"];
-  
+
+    inkub_alarm_on = doc["inkub_alarm_on"];
+    csir_alarm_on = doc["csir_alarm_on"];
+    uhaz_alarm_on = doc["uhaz_alarm_on"];
+
     Serial.println("Config got:");
-    Serial.print("noszlop_uveghaz_alarm =" + String(noszlop_uveghaz_alarm));
-    Serial.print("pinginterval =" + String(pinginterval));
-    Serial.print("update_interval =" + String(update_interval));
-    Serial.print("csir_timeout =" + String(csir_timeout));
-    Serial.print("uhaz_timeout =" + String(uhaz_timeout));
+    Serial.println("noszlop_uveghaz_alarm =" + String(noszlop_uveghaz_alarm));
+    Serial.println("pinginterval =" + String(pinginterval));
+    Serial.println("update_interval =" + String(update_interval));
+    Serial.println("csir_timeout =" + String(csir_timeout));
+    Serial.println("uhaz_timeout =" + String(uhaz_timeout));
+    Serial.println("inkub_alarm_on =" + String(inkub_alarm_on));
+    Serial.println("csir_alarm_on =" + String(csir_alarm_on));
+    Serial.println("uhaz_alarm_on =" + String(uhaz_alarm_on));
   }
 }
 
