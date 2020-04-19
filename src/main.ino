@@ -180,17 +180,26 @@ void kijelzo()
   lcd.setCursor(0, 0);
   lcd.print("csir: ");
   lcd.print(csir_homerseklet);
-  lcd.print("C");
+  lcd.print(" R:");
+  lcd.print(csir_alarm_on);
+  lcd.print(" T:");
+  lcd.print(csir_last_on);
 
   lcd.setCursor(0, 2);
   lcd.print("inkub: ");
   lcd.print(inkub_homerseklet);
-  lcd.print("C");
+  lcd.print(" R:");
+  lcd.print(inkub_alarm_on);
+  lcd.print(" T:");
+  lcd.print(inkub_last_on);
 
   lcd.setCursor(0, 3);
   lcd.print("uhaz: ");
   lcd.print(uhaz_homerseklet);
-  lcd.print("C");
+  lcd.print(" R:");
+  lcd.print(uhaz_alarm_on);
+  lcd.print(" T:");
+  lcd.print(uhaz_last_on);
 }
 
 void alarm(String message)
