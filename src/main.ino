@@ -1,5 +1,5 @@
-static String name = "noszlop_kijelzo_teszt"; //to csiraztato
-static String ver = "1_3";                    //diff to 1_2: riasztások konfigból való kapcsolása
+static String name = "noszlop_kijelzo"; //to csiraztato
+static String ver = "1_3";                    //diff to 1_2: riasztások konfigból való kapcsolása, kijelző mod
 
 //////////////////////////////////////////////
 ////////////CONFIG////////////////////////////
