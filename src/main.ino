@@ -1,6 +1,5 @@
 static String name = "noszlop_kijelzo"; //to csiraztato
-static String ver = "1_3";                    //diff to 1_2: riasztások konfigból való kapcsolása, kijelző mod
-
+static String ver = "1_8";              //diff to 1_7: fix telikert riasztás
 //////////////////////////////////////////////
 ////////////CONFIG////////////////////////////
 #include "secrets.h"
@@ -9,18 +8,28 @@ float csir_homerseklet;
 int csir_last_on;
 int csir_timeout = 300;
 boolean csir_alarm_on = true;
+int csir_futes = -1;
 
 float uhaz_homerseklet = 100;
 float noszlop_uveghaz_alarm = 2;
 int uhaz_last_on;
 int uhaz_timeout = 300;
 boolean uhaz_alarm_on = true;
+int uhaz_futes = -1;
 
 float inkub_homerseklet = 100;
 float noszlop_inkub_alarm = 2;
 int inkub_last_on;
 int inkub_timeout = 300;
 boolean inkub_alarm_on = true;
+int inkub_futes = -1;
+
+float telikert_homerseklet = 100;
+float noszlop_telikert_alarm = 2;
+int telikert_last_on;
+int telikert_timeout = 300;
+boolean telikert_alarm_on = true;
+int telikert_futes = -1;
 
 int network_timeout = 0;
 int pinginterval = 1;
@@ -118,7 +127,7 @@ void loop()
   {
     if (uhaz_homerseklet < noszlop_uveghaz_alarm)
     {
-      alarm("Uhaz Hideg!" + String(uhaz_homerseklet));
+      alarm("Uhaz Hideg! " + String(uhaz_homerseklet));
     }
     if (uhaz_last_on > uhaz_timeout)
     {
@@ -130,11 +139,23 @@ void loop()
   {
     if (inkub_homerseklet < noszlop_inkub_alarm)
     {
-      alarm("Inkub Hideg!" + String(inkub_homerseklet));
+      alarm("Inkub Hideg! " + String(inkub_homerseklet));
     }
     if (inkub_last_on > inkub_timeout)
     {
-      alarm("nem latom az Inkubátort!");
+      alarm("nem latom az Inkubatort!");
+    }
+  }
+
+    if (telikert_alarm_on == true)
+  {
+    if (telikert_homerseklet < noszlop_telikert_alarm)
+    {
+      alarm("Telikert Hideg! " + String(telikert_homerseklet));
+    }
+    if (telikert_last_on > telikert_timeout)
+    {
+      alarm("nem latom az Telikertet!");
     }
   }
 
@@ -158,6 +179,11 @@ void loop()
   Serial.print(" -- treshold: ");
   Serial.println(inkub_timeout);
 
+  Serial.print("----telikert last on: ");
+  Serial.print(telikert_last_on);
+  Serial.print(" -- treshold: ");
+  Serial.println(telikert_timeout);
+
   j++;
   if (j > update_interval)
   {
@@ -179,27 +205,64 @@ void kijelzo()
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print("csir: ");
-  lcd.print(csir_homerseklet);
+  if (csir_last_on > csir_timeout)
+  {
+    lcd.print("--");
+  }
+  else
+  {
+    lcd.print(csir_homerseklet);
+  }
+
   lcd.print(" R:");
   lcd.print(csir_alarm_on);
-  lcd.print(" T:");
-  lcd.print(csir_last_on);
+  lcd.print(" F:");
+  lcd.print(csir_futes);
+
+  lcd.setCursor(0, 1);
+  lcd.print("tkert: ");
+  if (telikert_last_on > telikert_timeout)
+  {
+    lcd.print("--");
+  }
+  else
+  {
+    lcd.print(telikert_homerseklet);
+  }
+  lcd.print(" R:");
+  lcd.print(telikert_alarm_on);
+  lcd.print(" F:");
+  lcd.print(telikert_futes);
 
   lcd.setCursor(0, 2);
   lcd.print("inkub: ");
-  lcd.print(inkub_homerseklet);
+  if (inkub_last_on > inkub_timeout)
+  {
+    lcd.print("--");
+  }
+  else
+  {
+    lcd.print(inkub_homerseklet);
+  }
   lcd.print(" R:");
   lcd.print(inkub_alarm_on);
-  lcd.print(" T:");
-  lcd.print(inkub_last_on);
+  lcd.print(" F:");
+  lcd.print(inkub_futes);
 
   lcd.setCursor(0, 3);
   lcd.print("uhaz: ");
-  lcd.print(uhaz_homerseklet);
+  if (uhaz_last_on > uhaz_timeout)
+  {
+    lcd.print("--");
+  }
+  else
+  {
+    lcd.print(uhaz_homerseklet);
+  }
   lcd.print(" R:");
   lcd.print(uhaz_alarm_on);
-  lcd.print(" T:");
-  lcd.print(uhaz_last_on);
+  lcd.print(" F:");
+  lcd.print(uhaz_futes);
 }
 
 void alarm(String message)
@@ -467,14 +530,14 @@ String POSTTask(String url, const uint8_t Fingeprint[20], String payload)
 //////////////////////////////////////////////
 ////////////GETCONFIG/////////////////////////
 
-const size_t capacity = JSON_OBJECT_SIZE(6) + 800;
+const size_t capacity = JSON_OBJECT_SIZE(13) + 900;
 DynamicJsonDocument doc(capacity);
 
 void getdata()
 {
   String baseurl = String(F("https://script.google.com/macros/s/")) + String(GScriptId) + "/exec?";
 
-  String params = "csir_homerseklet=0&csir_last_on=0&uhaz_homerseklet=0&uhaz_last_on=0&inkub_homerseklet=0&inkub_last_on=0"; //ezt piffmanből a legegyszerűbb
+  String params = "csir_homerseklet=0&csir_last_on=0&uhaz_homerseklet=0&uhaz_last_on=0&inkub_homerseklet=0&telikert_homerseklet=0&inkub_last_on=0&telikert_last_on=0&csir_futes=0&uhaz_futes=0&inkub_futes=0&telikert_futes=0"; //ezt piffmanből a legegyszerűbb
 
   String url = baseurl + params;
   String response = GETTask(url, Googlefingerprint, 1000);
@@ -486,14 +549,30 @@ void getdata()
 
     csir_homerseklet = doc["csir_homerseklet"];
     csir_last_on = doc["csir_last_on"];
+    csir_futes = doc["csir_futes"];
 
     uhaz_homerseklet = doc["uhaz_homerseklet"];
     uhaz_last_on = doc["uhaz_last_on"];
+    uhaz_futes = doc["uhaz_futes"];
 
     inkub_homerseklet = doc["inkub_homerseklet"];
     inkub_last_on = doc["inkub_last_on"];
+    inkub_futes = doc["inkub_futes"];
 
-    Serial.println("data got: csir_homerseklet =" + String(csir_homerseklet));
+    telikert_homerseklet = doc["telikert_homerseklet"];
+    telikert_last_on = doc["telikert_last_on"];
+    telikert_futes = doc["telikert_futes"];
+
+    Serial.println("data got:");
+    Serial.println("csir_homerseklet =" + String(csir_homerseklet));
+    Serial.println("csir_last_on =" + String(csir_last_on));
+    Serial.println("csir_futes =" + String(csir_futes));
+    Serial.println("inkub_homerseklet =" + String(inkub_homerseklet));
+    Serial.println("inkub_last_on =" + String(inkub_last_on));
+    Serial.println("inkub_futes =" + String(inkub_futes));
+    Serial.println("uhaz_homerseklet =" + String(uhaz_homerseklet));
+    Serial.println("uhaz_last_on =" + String(uhaz_last_on));
+    Serial.println("uhaz_futes =" + String(uhaz_futes));
   }
 }
 
@@ -501,7 +580,7 @@ void getconfig()
 {
   String baseurl = String(F("https://script.google.com/macros/s/")) + String(GScriptId) + "/exec?";
 
-  String params = "update_interval=0&pinginterval=0&csir_timeout=0&noszlop_uveghaz_alarm=0&uhaz_timeout=0&inkub_alarm_on=0&uhaz_alarm_on=0&csir_alarm_on=0"; //ezt piffmanből a legegyszerűbb
+  String params = "update_interval=0&pinginterval=0&csir_timeout=0&telikert_timeout=0&noszlop_uveghaz_alarm=0&uhaz_timeout=0&inkub_alarm_on=0&uhaz_alarm_on=0&csir_alarm_on=0&telikert_alarm_on=0"; //ezt piffmanből a legegyszerűbb
 
   String url = baseurl + params;
   String response = GETTask(url, Googlefingerprint, 1000);
@@ -514,10 +593,12 @@ void getconfig()
     update_interval = doc["update_interval"];
     csir_timeout = doc["csir_timeout"];
     uhaz_timeout = doc["uhaz_timeout"];
+    uhaz_timeout = doc["telikert_timeout"];
 
     inkub_alarm_on = doc["inkub_alarm_on"];
     csir_alarm_on = doc["csir_alarm_on"];
     uhaz_alarm_on = doc["uhaz_alarm_on"];
+    telikert_alarm_on = doc["telikert_alarm_on"];
 
     Serial.println("Config got:");
     Serial.println("noszlop_uveghaz_alarm =" + String(noszlop_uveghaz_alarm));
