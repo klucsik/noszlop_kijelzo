@@ -1,5 +1,5 @@
 static String name = "noszlop_kijelzo"; //to csiraztato
-static String ver = "1_8";              //diff to 1_7: fix telikert riasztás
+static String ver = "1_9";              //diff to 1_8: fix nethiba riasztás, gscript id frissítés
 //////////////////////////////////////////////
 ////////////CONFIG////////////////////////////
 #include "secrets.h"
@@ -109,7 +109,12 @@ void loop()
 {
   Serial.println("loop...");
   delay(1000 * pinginterval);
-  getdata();
+  getdataUhazInkub();
+  delay(1500);
+  getdataCsir();
+  delay(1500);
+  getdataTelikert();
+  delay(1500);
   getconfig();
   kijelzo();
   Serial.print("----csir last on: ");
@@ -530,17 +535,51 @@ String POSTTask(String url, const uint8_t Fingeprint[20], String payload)
 //////////////////////////////////////////////
 ////////////GETCONFIG/////////////////////////
 
-const size_t capacity = JSON_OBJECT_SIZE(13) + 900;
+const size_t capacity = JSON_OBJECT_SIZE(13) + 950;
 DynamicJsonDocument doc(capacity);
 
-void getdata()
+void getdataUhazInkub()
 {
   String baseurl = String(F("https://script.google.com/macros/s/")) + String(GScriptId) + "/exec?";
 
-  String params = "csir_homerseklet=0&csir_last_on=0&uhaz_homerseklet=0&uhaz_last_on=0&inkub_homerseklet=0&telikert_homerseklet=0&inkub_last_on=0&telikert_last_on=0&csir_futes=0&uhaz_futes=0&inkub_futes=0&telikert_futes=0"; //ezt piffmanből a legegyszerűbb
+  String params = String("uhaz_homerseklet=0&uhaz_last_on=0&uhaz_futes=0")+ "&" + String("inkub_homerseklet=0&inkub_last_on=0&inkub_futes=0");
 
   String url = baseurl + params;
-  String response = GETTask(url, Googlefingerprint, 1000);
+  String response = GETTask(url, Googlefingerprint, 1200);
+  network_timeout++;
+  if (response.length() > 1)
+  {
+    network_timeout = 0;
+    deserializeJson(doc, response);
+
+    uhaz_homerseklet = doc["uhaz_homerseklet"];
+    uhaz_last_on = doc["uhaz_last_on"];
+    uhaz_futes = doc["uhaz_futes"];
+
+    inkub_homerseklet = doc["inkub_homerseklet"];
+    inkub_last_on = doc["inkub_last_on"];
+    inkub_futes = doc["inkub_futes"];
+
+    Serial.println("data got:");
+
+    Serial.println("uhaz_homerseklet =" + String(uhaz_homerseklet));
+    Serial.println("uhaz_last_on =" + String(uhaz_last_on));
+    Serial.println("uhaz_futes =" + String(uhaz_futes));
+
+    Serial.println("inkub_homerseklet =" + String(inkub_homerseklet));
+    Serial.println("inkub_last_on =" + String(inkub_last_on));
+    Serial.println("inkub_futes =" + String(inkub_futes));
+  }
+}
+
+void getdataCsir()
+{
+  String baseurl = String(F("https://script.google.com/macros/s/")) + String(GScriptId) + "/exec?";
+
+  String params = "csir_homerseklet=0&csir_last_on=0&csir_futes=0";
+
+  String url = baseurl + params;
+  String response = GETTask(url, Googlefingerprint, 1200);
   network_timeout++;
   if (response.length() > 1)
   {
@@ -551,39 +590,49 @@ void getdata()
     csir_last_on = doc["csir_last_on"];
     csir_futes = doc["csir_futes"];
 
-    uhaz_homerseklet = doc["uhaz_homerseklet"];
-    uhaz_last_on = doc["uhaz_last_on"];
-    uhaz_futes = doc["uhaz_futes"];
+    Serial.println("data got:");
 
-    inkub_homerseklet = doc["inkub_homerseklet"];
-    inkub_last_on = doc["inkub_last_on"];
-    inkub_futes = doc["inkub_futes"];
+    Serial.println("csir_homerseklet =" + String(csir_homerseklet));
+    Serial.println("csir_last_on =" + String(csir_last_on));
+    Serial.println("csir_futes =" + String(csir_futes));
+  }
+}
+
+void getdataTelikert()
+{
+  String baseurl = String(F("https://script.google.com/macros/s/")) + String(GScriptId) + "/exec?";
+
+  String params = "telikert_homerseklet=0&telikert_last_on=0&telikert_futes=0";
+
+  String url = baseurl + params;
+  String response = GETTask(url, Googlefingerprint, 1200);
+  network_timeout++;
+  if (response.length() > 1)
+  {
+    network_timeout = 0;
+    deserializeJson(doc, response);
 
     telikert_homerseklet = doc["telikert_homerseklet"];
     telikert_last_on = doc["telikert_last_on"];
     telikert_futes = doc["telikert_futes"];
 
     Serial.println("data got:");
-    Serial.println("csir_homerseklet =" + String(csir_homerseklet));
-    Serial.println("csir_last_on =" + String(csir_last_on));
-    Serial.println("csir_futes =" + String(csir_futes));
-    Serial.println("inkub_homerseklet =" + String(inkub_homerseklet));
-    Serial.println("inkub_last_on =" + String(inkub_last_on));
-    Serial.println("inkub_futes =" + String(inkub_futes));
-    Serial.println("uhaz_homerseklet =" + String(uhaz_homerseklet));
-    Serial.println("uhaz_last_on =" + String(uhaz_last_on));
-    Serial.println("uhaz_futes =" + String(uhaz_futes));
+    Serial.println("telikert_homerseklet =" + String(telikert_homerseklet));
+    Serial.println("telikert_last_on =" + String(telikert_last_on));
+    Serial.println("telikert_futes =" + String(telikert_futes));
+
   }
 }
+
 
 void getconfig()
 {
   String baseurl = String(F("https://script.google.com/macros/s/")) + String(GScriptId) + "/exec?";
 
-  String params = "update_interval=0&pinginterval=0&csir_timeout=0&telikert_timeout=0&noszlop_uveghaz_alarm=0&uhaz_timeout=0&inkub_alarm_on=0&uhaz_alarm_on=0&csir_alarm_on=0&telikert_alarm_on=0"; //ezt piffmanből a legegyszerűbb
+  String params = "update_interval=0&pinginterval=0&csir_timeout=0&telikert_timeout=0&noszlop_uveghaz_alarm=0&uhaz_timeout=0&inkub_alarm_on=0&uhaz_alarm_on=0&csir_alarm_on=0&telikert_alarm_on=0";
 
   String url = baseurl + params;
-  String response = GETTask(url, Googlefingerprint, 1000);
+  String response = GETTask(url, Googlefingerprint, 1200);
 
   if (response.length() > 1)
   {
