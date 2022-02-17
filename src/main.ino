@@ -1,5 +1,5 @@
 static String name = "noszlop_kijelzo"; //to csiraztato
-static String ver = "1_9";              //diff to 1_8: fix nethiba riasztás, gscript id frissítés
+static String ver = "1_10";              //diff to 1_9: inkub -> télikert_hűtés, gscript id frissítés
 //////////////////////////////////////////////
 ////////////CONFIG////////////////////////////
 #include "secrets.h"
@@ -87,8 +87,9 @@ void setup()
   lcd.clear();
   lcd.print("mindjart kesz...");
   WiFiManager wifiManager;
-  wifiManager.setTimeout(30);
-  wifiManager.autoConnect("mocsigoncska_ap");
+  wifiManager.setTimeout(180);
+  wifiManager.setConfigPortalTimeout(180);
+  wifiManager.autoConnect("mocsigoncska_kijelzo_ap");
   Serial.println("connected...yeey :)");
   delay(1000);
 
@@ -538,11 +539,11 @@ String POSTTask(String url, const uint8_t Fingeprint[20], String payload)
 const size_t capacity = JSON_OBJECT_SIZE(13) + 950;
 DynamicJsonDocument doc(capacity);
 
-void getdataUhazInkub()
+void getdataUhazInkub() //az inkub most a telikertben van
 {
   String baseurl = String(F("https://script.google.com/macros/s/")) + String(GScriptId) + "/exec?";
 
-  String params = String("uhaz_homerseklet=0&uhaz_last_on=0&uhaz_futes=0")+ "&" + String("inkub_homerseklet=0&inkub_last_on=0&inkub_futes=0");
+  String params = String("uhaz_homerseklet=0&uhaz_last_on=0&uhaz_futes=0")+ "&" + String("noszlop_telikert_hutes_homerseklet=0&noszlop_telikert_hutes_last_on=0&noszlop_telikert_hutes_futes=0");
 
   String url = baseurl + params;
   String response = GETTask(url, Googlefingerprint, 1200);
@@ -556,9 +557,9 @@ void getdataUhazInkub()
     uhaz_last_on = doc["uhaz_last_on"];
     uhaz_futes = doc["uhaz_futes"];
 
-    inkub_homerseklet = doc["inkub_homerseklet"];
-    inkub_last_on = doc["inkub_last_on"];
-    inkub_futes = doc["inkub_futes"];
+    inkub_homerseklet = doc["noszlop_telikert_hutes_homerseklet"];
+    inkub_last_on = doc["noszlop_telikert_hutes_last_on"];
+    inkub_futes = doc["noszlop_telikert_hutes_futes"];
 
     Serial.println("data got:");
 
