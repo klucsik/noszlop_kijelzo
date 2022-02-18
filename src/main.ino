@@ -1,5 +1,5 @@
 static String name = "noszlop_kijelzo"; //to csiraztato
-static String ver = "1_10";              //diff to 1_9: inkub -> télikert_hűtés, gscript id frissítés
+static String ver = "1_11";              //diff to 1_9: inkub -> télikert_hűtés, gscript id frissítés
 //////////////////////////////////////////////
 ////////////CONFIG////////////////////////////
 #include "secrets.h"
