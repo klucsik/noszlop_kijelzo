@@ -15,7 +15,7 @@ Secrets sec;
 //////////////////////////////////////////////
 ////////////CONFIG////////////////////////////
 static String name = "noszlop_kijelzo";
-static String ver = "2_5"; // InfluxDB integration
+static String ver = "2_6"; // InfluxDB integration
 
 // Sensor data variables
 float csir_homerseklet;
@@ -275,7 +275,7 @@ void kijelzo()
   lcd.setBacklight(255);
   lcd.clear();
   lcd.setCursor(0, 0);
-  lcd.print("csir: ");
+  lcd.print("csr: ");
   if (csir_last_on > csir_timeout)
   {
     lcd.print("--");
@@ -285,13 +285,13 @@ void kijelzo()
     lcd.print(csir_homerseklet);
   }
 
-  lcd.print(" R:");
+  lcd.print("R:");
   lcd.print(csir_alarm_on);
-  lcd.print(" F:");
+  lcd.print("F:");
   lcd.print(csir_futes);
 
   lcd.setCursor(0, 1);
-  lcd.print("tkert: ");
+  lcd.print("tkr: ");
   if (telikert_last_on > telikert_timeout)
   {
     lcd.print("--");
@@ -302,11 +302,11 @@ void kijelzo()
   }
   lcd.print(" R:");
   lcd.print(telikert_alarm_on);
-  lcd.print(" F:");
+  lcd.print("F:");
   lcd.print(telikert_futes);
 
   lcd.setCursor(0, 2);
-  lcd.print("inkub: ");
+  lcd.print("thu: ");
   if (inkub_last_on > inkub_timeout)
   {
     lcd.print("--");
@@ -315,25 +315,25 @@ void kijelzo()
   {
     lcd.print(inkub_homerseklet);
   }
-  lcd.print(" R:");
+  lcd.print("R:");
   lcd.print(inkub_alarm_on);
-  lcd.print(" F:");
+  lcd.print("F:");
   lcd.print(inkub_futes);
 
-  lcd.setCursor(0, 3);
-  lcd.print("uhaz: ");
-  if (uhaz_last_on > uhaz_timeout)
-  {
-    lcd.print("--");
-  }
-  else
-  {
-    lcd.print(uhaz_homerseklet);
-  }
-  lcd.print(" R:");
-  lcd.print(uhaz_alarm_on);
-  lcd.print(" F:");
-  lcd.print(uhaz_futes);
+  // lcd.setCursor(0, 3);
+  // lcd.print("uhaz: ");
+  // if (uhaz_last_on > uhaz_timeout)
+  // {
+  //   lcd.print("--");
+  // }
+  // else
+  // {
+  //   lcd.print(uhaz_homerseklet);
+  // }
+  // lcd.print(" R:");
+  // lcd.print(uhaz_alarm_on);
+  // lcd.print(" F:");
+  // lcd.print(uhaz_futes);
 }
 
 void alarm(String message)
