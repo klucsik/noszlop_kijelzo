@@ -330,8 +330,6 @@ void updateFunc(String Name, String Version)
     USE_SERIAL.print("[HTTP] GET...\n");
     // start connection and send HTTP header
     int httpCode = http.GET();
-    delay(10000); //wait for bootup of the server
-    httpCode = http.GET();
     // httpCode will be negative on error
     if (httpCode > 0)
     {
