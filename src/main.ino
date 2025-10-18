@@ -15,7 +15,7 @@ Secrets sec;
 //////////////////////////////////////////////
 ////////////CONFIG////////////////////////////
 static String name = "noszlop_kijelzo";
-static String ver = "2_4"; // InfluxDB integration
+static String ver = "2_5"; // InfluxDB integration
 
 // Sensor data variables
 float csir_homerseklet;
