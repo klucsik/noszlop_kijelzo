@@ -15,7 +15,7 @@ Secrets sec;
 //////////////////////////////////////////////
 ////////////CONFIG////////////////////////////
 static String name = "noszlop_kijelzo";
-static String ver = "2_7";
+static String ver = "2_8";
 
 // Sensor data variables
 float csir_homerseklet;
@@ -182,12 +182,11 @@ void loop()
   USE_SERIAL.println("loop...");
   delay(1000 * pinginterval);
   
-  getdataUhazInkub();
-  delay(1500);
+  getdataUhaz();
+  getdataInkub();
   getdataCsir();
-  delay(1500);
   getdataTelikert();
-  delay(1500);
+  getdataTelikertHutes();
   getconfig();
   kijelzo();
   
@@ -235,6 +234,18 @@ void loop()
     if (telikert_last_on > telikert_timeout)
     {
       alarm("nem latom az Telikertet!");
+    }
+  }
+
+  if (telikert_hutes_alarm_on == true)
+  {
+    if (telikert_hutes_homerseklet > noszlop_telikert_hutes_alarm)
+    {
+      alarm("Telikert Hutes Magas! " + String(telikert_hutes_homerseklet));
+    }
+    if (telikert_hutes_last_on > telikert_hutes_timeout)
+    {
+      alarm("nem latom a Telikert Huteset!");
     }
   }
 
@@ -602,7 +613,7 @@ bool queryTemperature(String deviceName, float &temperature, int &lastOn)
 {
   String query = "from(bucket: \"noszlop\") |> range(start: -1h) |> filter(fn: (r) => r.name == \"" + deviceName + "\" and r._field == \"temp\") |> last()";
   FluxQueryResult result = influx_client.query(query);
-  
+  USE_SERIAL.println("queryTemperature for " + deviceName);
   if (result.next())
   {
     temperature = result.getValueByName("_value").getDouble();
@@ -650,29 +661,34 @@ bool getDeviceData(String deviceName, float &temperature, int &lastOn, int &heat
   return true;
 }
 
-void getdataUhazInkub()
+void getdataUhaz()
 {
-  USE_SERIAL.println("Getting data for Uhaz and Inkub from InfluxDB...");
-  getDeviceData("uhaz", uhaz_homerseklet, uhaz_last_on, uhaz_futes);
-  getDeviceData("noszlop_telikert_hutes", inkub_homerseklet, inkub_last_on, inkub_futes);
+  USE_SERIAL.println("Getting data for Uhaz from InfluxDB...");
+  getDeviceData("noszlop_uveghaz", uhaz_homerseklet, uhaz_last_on, uhaz_futes);
+}
+
+void getdataInkub()
+{
+  USE_SERIAL.println("Getting data for Inkub from InfluxDB...");
+  getDeviceData("noszlop_inkubator", inkub_homerseklet, inkub_last_on, inkub_futes);
 }
 
 void getdataCsir()
 {
   USE_SERIAL.println("Getting data for Csir from InfluxDB...");
-  getDeviceData("csir", csir_homerseklet, csir_last_on, csir_futes);
+  getDeviceData("noszlop_csiraztato", csir_homerseklet, csir_last_on, csir_futes);
 }
 
 void getdataTelikert()
 {
   USE_SERIAL.println("Getting data for Telikert from InfluxDB...");
-  getDeviceData("telikert", telikert_homerseklet, telikert_last_on, telikert_futes);
+  getDeviceData("noszlop_telikert", telikert_homerseklet, telikert_last_on, telikert_futes);
 }
 
 void getdataTelikertHutes()
 {
   USE_SERIAL.println("Getting data for Telikert Hutes from InfluxDB...");
-  getDeviceData("telikert_hutes", telikert_hutes_homerseklet, telikert_hutes_last_on, telikert_hutes_futes);
+  getDeviceData("noszlop_telikert_hutes", telikert_hutes_homerseklet, telikert_hutes_last_on, telikert_hutes_futes);
 }
 
 
