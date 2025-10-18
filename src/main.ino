@@ -19,6 +19,7 @@ static String ver = "2_8";
 
 // Sensor data variables
 float csir_homerseklet;
+float noszlop_csir_alarm = 20;
 int csir_last_on;
 int csir_timeout = 300;
 boolean csir_alarm_on = true;
@@ -200,7 +201,7 @@ void loop()
       alarm("nem latom a csiraztatot!");
     }
   }
-
+ //TODO: a hőmérséklet tresholdoknál a relációban figyelmebe kell venni azt hogy invertálva van e a fűtés... ehhez ezt le kell szedni influxról.
   if (uhaz_alarm_on == true)
   {
     if (uhaz_homerseklet < noszlop_uveghaz_alarm)
@@ -237,6 +238,7 @@ void loop()
     }
   }
 
+  //ALERT! This is inverted already!
   if (telikert_hutes_alarm_on == true)
   {
     if (telikert_hutes_homerseklet > noszlop_telikert_hutes_alarm)
@@ -790,10 +792,11 @@ void getconfig()
   telikert_hutes_timeout = (int)telikert_hutes_timeout_temp;
   
   // Query float/double config values
-  queryConfigDouble("noszlop_uveghaz_alarm", noszlop_uveghaz_alarm);
-  queryConfigDouble("noszlop_inkub_alarm", noszlop_inkub_alarm);
-  queryConfigDouble("noszlop_telikert_alarm", noszlop_telikert_alarm);
-  queryConfigDouble("noszlop_telikert_hutes_alarm", noszlop_telikert_hutes_alarm);
+  queryConfigDouble("csir_alarm", noszlop_csir_alarm);
+  queryConfigDouble("uveghaz_alarm", noszlop_uveghaz_alarm);
+  queryConfigDouble("inkub_alarm", noszlop_inkub_alarm);
+  queryConfigDouble("telikert_alarm", noszlop_telikert_alarm);
+  queryConfigDouble("telikert_hutes_alarm", noszlop_telikert_hutes_alarm); //TODO: these are not updated properly
 
   // Query boolean config values
   queryConfigBool("csir_alarm_on", csir_alarm_on);
