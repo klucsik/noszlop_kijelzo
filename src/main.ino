@@ -15,7 +15,7 @@ Secrets sec;
 //////////////////////////////////////////////
 ////////////CONFIG////////////////////////////
 static String name = "noszlop_kijelzo";
-static String ver = "2_6"; // InfluxDB integration
+static String ver = "2_7";
 
 // Sensor data variables
 float csir_homerseklet;
@@ -44,6 +44,14 @@ int telikert_last_on;
 int telikert_timeout = 300;
 boolean telikert_alarm_on = true;
 int telikert_futes = -1;
+
+float telikert_hutes_homerseklet = 100;
+float noszlop_telikert_hutes_alarm = 2;
+int telikert_hutes_last_on;
+int telikert_hutes_timeout = 300;
+boolean telikert_hutes_alarm_on = true;
+int telikert_hutes_futes = -1;
+
 
 int network_timeout = 0;
 int pinginterval = 1;
@@ -274,6 +282,8 @@ void kijelzo()
 {
   lcd.setBacklight(255);
   lcd.clear();
+
+  // csir
   lcd.setCursor(0, 0);
   lcd.print("csr: ");
   if (csir_last_on > csir_timeout)
@@ -290,6 +300,7 @@ void kijelzo()
   lcd.print("F:");
   lcd.print(csir_futes);
 
+  // telikert
   lcd.setCursor(0, 1);
   lcd.print("tkr: ");
   if (telikert_last_on > telikert_timeout)
@@ -305,20 +316,21 @@ void kijelzo()
   lcd.print("F:");
   lcd.print(telikert_futes);
 
+  // telikert_hutes
   lcd.setCursor(0, 2);
   lcd.print("thu: ");
-  if (inkub_last_on > inkub_timeout)
+  if (telikert_hutes_last_on > telikert_hutes_timeout)
   {
     lcd.print("--");
   }
   else
   {
-    lcd.print(inkub_homerseklet);
+    lcd.print(telikert_hutes_homerseklet);
   }
   lcd.print("R:");
-  lcd.print(inkub_alarm_on);
+  lcd.print(telikert_hutes_alarm_on);
   lcd.print("F:");
-  lcd.print(inkub_futes);
+  lcd.print(telikert_hutes_futes);
 
   // lcd.setCursor(0, 3);
   // lcd.print("uhaz: ");
@@ -334,6 +346,13 @@ void kijelzo()
   // lcd.print(uhaz_alarm_on);
   // lcd.print(" F:");
   // lcd.print(uhaz_futes);
+
+  //increment last_on counters
+  csir_last_on ++;
+  uhaz_last_on ++;
+  inkub_last_on ++;
+  telikert_last_on ++;
+  telikert_hutes_last_on ++;
 }
 
 void alarm(String message)
@@ -599,7 +618,7 @@ bool queryTemperature(String deviceName, float &temperature, int &lastOn)
 // Helper function to query heating status from InfluxDB
 bool queryHeatingStatus(String deviceName, int &heatingStatus)
 {
-  String query = "from(bucket: \"noszlop\") |> range(start: -1h) |> filter(fn: (r) => r.name == \"" + deviceName + "\" and r._field == \"event\" and (r._value == \"Heater start\" or r._value == \"Heater stop\")) |> last()";
+  String query = "from(bucket: \"noszlop\") |> range(start: -1y) |> filter(fn: (r) => r.name == \"" + deviceName + "\" and r._field == \"event\" and (r._value == \"Heater start\" or r._value == \"Heater stop\")) |> last()";
   FluxQueryResult result = influx_client.query(query);
   
   if (result.next())
@@ -649,6 +668,13 @@ void getdataTelikert()
   USE_SERIAL.println("Getting data for Telikert from InfluxDB...");
   getDeviceData("telikert", telikert_homerseklet, telikert_last_on, telikert_futes);
 }
+
+void getdataTelikertHutes()
+{
+  USE_SERIAL.println("Getting data for Telikert Hutes from InfluxDB...");
+  getDeviceData("telikert_hutes", telikert_hutes_homerseklet, telikert_hutes_last_on, telikert_hutes_futes);
+}
+
 
 //////////////////////////////////////////////
 ////////////GETCONFIG FROM INFLUXDB///////////
@@ -729,6 +755,7 @@ void getconfig()
   long uhaz_timeout_temp = uhaz_timeout;
   long inkub_timeout_temp = inkub_timeout;
   long telikert_timeout_temp = telikert_timeout;
+  long telikert_hutes_timeout_temp = telikert_hutes_timeout;
   
   queryConfigLong("pinginterval", pinginterval_temp);
   queryConfigLong("update_interval", update_interval_temp);
@@ -736,6 +763,7 @@ void getconfig()
   queryConfigLong("uhaz_timeout", uhaz_timeout_temp);
   queryConfigLong("inkub_timeout", inkub_timeout_temp);
   queryConfigLong("telikert_timeout", telikert_timeout_temp);
+  queryConfigLong("telikert_hutes_timeout", telikert_hutes_timeout_temp);
   
   pinginterval = (int)pinginterval_temp;
   update_interval = (int)update_interval_temp;
@@ -743,17 +771,20 @@ void getconfig()
   uhaz_timeout = (int)uhaz_timeout_temp;
   inkub_timeout = (int)inkub_timeout_temp;
   telikert_timeout = (int)telikert_timeout_temp;
+  telikert_hutes_timeout = (int)telikert_hutes_timeout_temp;
   
   // Query float/double config values
   queryConfigDouble("noszlop_uveghaz_alarm", noszlop_uveghaz_alarm);
   queryConfigDouble("noszlop_inkub_alarm", noszlop_inkub_alarm);
   queryConfigDouble("noszlop_telikert_alarm", noszlop_telikert_alarm);
+  queryConfigDouble("noszlop_telikert_hutes_alarm", noszlop_telikert_hutes_alarm);
 
   // Query boolean config values
   queryConfigBool("csir_alarm_on", csir_alarm_on);
   queryConfigBool("uhaz_alarm_on", uhaz_alarm_on);
   queryConfigBool("inkub_alarm_on", inkub_alarm_on);
   queryConfigBool("telikert_alarm_on", telikert_alarm_on);
+  queryConfigBool("telikert_hutes_alarm_on", telikert_hutes_alarm_on);
 
   USE_SERIAL.println("Config retrieval completed from InfluxDB");
 }
