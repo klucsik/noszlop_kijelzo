@@ -1,9 +1,23 @@
-static String name = "noszlop_kijelzo"; //to csiraztato
-static String ver = "1_11";              //diff to 1_9: inkub -> télikert_hűtés, gscript id frissítés
-//////////////////////////////////////////////
-////////////CONFIG////////////////////////////
+#include <Arduino.h>
+#include <ESP8266WiFi.h>
+#include <ESP8266WiFiMulti.h>
+#include <ESP8266HTTPClient.h>
+#include <ESP8266httpUpdate.h>
+#include <TimeLib.h>
+#include <WiFiManager.h> //https://github.com/tzapu/WiFiManager
+#include <InfluxDbClient.h>
+#include <LiquidCrystal_PCF8574.h>
+#include <Wire.h>
+
 #include "secrets.h"
 Secrets sec;
+
+//////////////////////////////////////////////
+////////////CONFIG////////////////////////////
+static String name = "noszlop_kijelzo";
+static String ver = "2_1"; // InfluxDB integration
+
+// Sensor data variables
 float csir_homerseklet;
 int csir_last_on;
 int csir_timeout = 300;
@@ -34,31 +48,22 @@ int telikert_futes = -1;
 int network_timeout = 0;
 int pinginterval = 1;
 int update_interval = 5;
-const uint8_t Googlefingerprint[20] = {0x63, 0x92, 0xD6, 0x31, 0x89, 0x30, 0x9B, 0x7A, 0x94, 0x33, 0x71, 0x67, 0xB5, 0x9F, 0xDE, 0x99, 0x69, 0xA1, 0x88, 0xF7};
-const uint8_t Discordfingerprint[20] = {0x2D, 0x08, 0xE9, 0x2D, 0x0A, 0x54, 0x5A, 0xD5, 0xB4, 0x0A, 0x57, 0xF6, 0x68, 0x85, 0x1A, 0x79, 0x52, 0xE1, 0xFA, 0x65};
+
 const String update_server = sec.update_server;
 #define USE_SERIAL Serial
 
-const String GScriptId = sec.gID;
-const String discord_chanel = sec.discord_chanel;
+// InfluxDB configuration
+#define INFLUXDB_ORG "influxdata"
+#define INFLUXDB_BUCKET "noszlop"
+InfluxDBClient influx_client(sec.influx_url, INFLUXDB_ORG, INFLUXDB_BUCKET, sec.influx_token);
+Point influxdb_line("noszlop_kijelzo"); // measurement name
+
 
 ////////////CONFIG////////////////////////////
 //////////////////////////////////////////////
 
-#include <Arduino.h>
-#include <ESP8266WiFi.h>
-#include <ESP8266WiFiMulti.h>
-#include <ESP8266HTTPClient.h>
-#include <ESP8266httpUpdate.h>
-#include <ESP8266HTTPClient.h>
-#include <TimeLib.h>
-#include <ArduinoJson.h>
-#include <WiFiManager.h> //https://github.com/tzapu/WiFiManager
 ESP8266WiFiMulti WiFiMulti;
 WiFiClient client;
-
-#include <LiquidCrystal_PCF8574.h>
-#include <Wire.h>
 
 LiquidCrystal_PCF8574 lcd(0x27); // set the LCD address to 0x27 for a 16 chars and 2 line display
 
@@ -66,7 +71,7 @@ LiquidCrystal_PCF8574 lcd(0x27); // set the LCD address to 0x27 for a 16 chars a
 ////////////SETUP ////////////////////////////
 void setup()
 {
-  //test_lcd
+  // Initialize LCD
   lcd.begin(20, 4);
   lcd.setBacklight(255);
   lcd.home();
@@ -77,6 +82,8 @@ void setup()
   delay(400);
   lcd.setBacklight(255);
   alarm("Teszt riasztas!");
+
+  // Initialize Serial
   USE_SERIAL.begin(115200);
   USE_SERIAL.setDebugOutput(true);
   USE_SERIAL.println();
@@ -84,18 +91,28 @@ void setup()
   USE_SERIAL.println(name);
   USE_SERIAL.print("ver: ");
   USE_SERIAL.println(ver);
+
   lcd.clear();
   lcd.print("mindjart kesz...");
+
+  // Connect to WiFi
   WiFiManager wifiManager;
   wifiManager.setTimeout(180);
   wifiManager.setConfigPortalTimeout(180);
   wifiManager.autoConnect("mocsigoncska_kijelzo_ap");
-  Serial.println("connected...yeey :)");
+  USE_SERIAL.println("connected...yeey :)");
   delay(1000);
 
-  GsheetPost(F("log"), "startup: " + name + " " + ver);
-  discordPost("startup: " + name + " " + ver);
+  // Initialize InfluxDB
+  influxdb_line.addTag("name", name);
+  influxdb_line.addTag("version", ver);
+  influxdb_line.addField("event", "Startup");
+  influx_client.writePoint(influxdb_line);
+  influxdb_line.clearFields();
 
+  discordPost("startup: " + name + " " + ver);
+  
+  getconfig();
   updateFunc(name, ver);
 }
 
@@ -108,8 +125,9 @@ int i = 0;
 int j = 0;
 void loop()
 {
-  Serial.println("loop...");
+  USE_SERIAL.println("loop...");
   delay(1000 * pinginterval);
+  
   getdataUhazInkub();
   delay(1500);
   getdataCsir();
@@ -118,8 +136,9 @@ void loop()
   delay(1500);
   getconfig();
   kijelzo();
-  Serial.print("----csir last on: ");
-  Serial.println(csir_last_on);
+  
+  USE_SERIAL.print("----csir last on: ");
+  USE_SERIAL.println(csir_last_on);
 
   if (csir_alarm_on == true)
   {
@@ -153,7 +172,7 @@ void loop()
     }
   }
 
-    if (telikert_alarm_on == true)
+  if (telikert_alarm_on == true)
   {
     if (telikert_homerseklet < noszlop_telikert_alarm)
     {
@@ -165,30 +184,30 @@ void loop()
     }
   }
 
-  Serial.print("----uhaz hom: ");
-  Serial.print(uhaz_homerseklet);
-  Serial.print(" -- treshold: ");
-  Serial.println(noszlop_uveghaz_alarm);
+  USE_SERIAL.print("----uhaz hom: ");
+  USE_SERIAL.print(uhaz_homerseklet);
+  USE_SERIAL.print(" -- treshold: ");
+  USE_SERIAL.println(noszlop_uveghaz_alarm);
 
-  Serial.print("----inkub hom: ");
-  Serial.print(inkub_homerseklet);
-  Serial.print(" -- treshold: ");
-  Serial.println(noszlop_inkub_alarm);
+  USE_SERIAL.print("----inkub hom: ");
+  USE_SERIAL.print(inkub_homerseklet);
+  USE_SERIAL.print(" -- treshold: ");
+  USE_SERIAL.println(noszlop_inkub_alarm);
 
-  Serial.print("----uhaz last on: ");
-  Serial.print(uhaz_last_on);
-  Serial.print(" -- treshold: ");
-  Serial.println(uhaz_timeout);
+  USE_SERIAL.print("----uhaz last on: ");
+  USE_SERIAL.print(uhaz_last_on);
+  USE_SERIAL.print(" -- treshold: ");
+  USE_SERIAL.println(uhaz_timeout);
 
-  Serial.print("----inkub last on: ");
-  Serial.print(inkub_last_on);
-  Serial.print(" -- treshold: ");
-  Serial.println(inkub_timeout);
+  USE_SERIAL.print("----inkub last on: ");
+  USE_SERIAL.print(inkub_last_on);
+  USE_SERIAL.print(" -- treshold: ");
+  USE_SERIAL.println(inkub_timeout);
 
-  Serial.print("----telikert last on: ");
-  Serial.print(telikert_last_on);
-  Serial.print(" -- treshold: ");
-  Serial.println(telikert_timeout);
+  USE_SERIAL.print("----telikert last on: ");
+  USE_SERIAL.print(telikert_last_on);
+  USE_SERIAL.print(" -- treshold: ");
+  USE_SERIAL.println(telikert_timeout);
 
   j++;
   if (j > update_interval)
@@ -274,7 +293,7 @@ void kijelzo()
 void alarm(String message)
 {
   tone(D8, 1800, 1000);
-  Serial.println("alarm: " + message);
+  USE_SERIAL.println("alarm: " + message);
   lcd.setBacklight(255);
   lcd.clear();
   lcd.setCursor(0, 0);
@@ -304,11 +323,11 @@ void updateFunc(String Name, String Version)
   HTTPClient http;
 
   String url = update_server + "/check?" + "name=" + Name + "&ver=" + Version;
-  Serial.print("[HTTP] check at " + url);
+  USE_SERIAL.print("[HTTP] check at " + url);
   if (http.begin(client, url))
   { // HTTP
 
-    Serial.print("[HTTP] GET...\n");
+    USE_SERIAL.print("[HTTP] GET...\n");
     // start connection and send HTTP header
     int httpCode = http.GET();
     delay(10000); //wait for bootup of the server
@@ -317,13 +336,13 @@ void updateFunc(String Name, String Version)
     if (httpCode > 0)
     {
       // HTTP header has been send and Server response header has been handled
-      Serial.printf("[HTTP] GET... code: %d\n", httpCode);
+      USE_SERIAL.printf("[HTTP] GET... code: %d\n", httpCode);
 
       // file found at server
       if (httpCode == HTTP_CODE_OK || httpCode == HTTP_CODE_MOVED_PERMANENTLY)
       {
         String payload = http.getString();
-        Serial.println(payload);
+        USE_SERIAL.println(payload);
         if (payload.indexOf("bin") > 0)
         {
           httpUpdateFunc(update_server + payload);
@@ -332,7 +351,7 @@ void updateFunc(String Name, String Version)
     }
     else
     {
-      Serial.printf("[HTTP] GET... failed, error: %s\n", http.errorToString(httpCode).c_str());
+      USE_SERIAL.printf("[HTTP] GET... failed, error: %s\n", http.errorToString(httpCode).c_str());
     }
 
     http.end();
@@ -403,43 +422,23 @@ void update_error(int err)
 
 //////////////////////////////////////////////
 ////////////HTTP  ////////////////////////////
-#include <ESP8266httpUpdate.h>
-#include <ESP8266HTTPClient.h>
-
-void GsheetPost(String sheet_name, String datastring)
-{
-  Serial.println(F("POST to spreadsheet:"));
-  String url = String(F("https://script.google.com/macros/s/")) + String(GScriptId) + "/exec";
-  String payload = String("{\"command\": \"appendRow\", \  \"sheet_name\": \"") + sheet_name + "\", \ \"values\": " + "\"" + datastring + "\"}";
-
-  Serial.println(POSTTask(url, Googlefingerprint, payload));
-};
 
 void discordPost(String message)
 {
-
   String payload = "{\"content\": \"" + message + "\"}";
-  String url = discord_chanel;
-  Serial.println(POSTTask(url, Discordfingerprint, payload));
-};
+  String url = sec.discord_url;
+  USE_SERIAL.println(POSTTask(url, payload));
+}
 
-String GETTask(String url, const uint8_t Fingeprint[20], uint32_t neededHeap)
+String GETTask(String url)
 {
-  if (ESP.getFreeHeap() < neededHeap)
-  {
-    Serial.println(F("too few heap left"));
-    discordPost("too few heap:" + String(ESP.getFreeHeap()));
-    ESP.reset();
-  }
   std::unique_ptr<BearSSL::WiFiClientSecure> client(new BearSSL::WiFiClientSecure);
-  client->setInsecure();
+  client->setInsecure(); //This will set the http connection to insecure! This is not advised, but I have found no good way to use real SSL, and my application doesn't need the added security
   HTTPClient https;
-  https.setFollowRedirects(true);
   if (https.begin(*client, url))
   {
-    Serial.print(F("[HTTPS] GET "));
-    Serial.println(url);
-    HeapPrintTask();
+    USE_SERIAL.print(F("[HTTPS] GET "));
+    USE_SERIAL.println(url);
 
     int httpCode = https.GET();
 
@@ -447,7 +446,7 @@ String GETTask(String url, const uint8_t Fingeprint[20], uint32_t neededHeap)
     if (httpCode > 0)
     {
       // HTTP header has been send and Server response header has been handled
-      Serial.printf("[HTTPS] GET... code: %d\n", httpCode);
+      USE_SERIAL.printf("[HTTPS] GET... code: %d\n", httpCode);
       if (httpCode == 302)
       {
         String redirectUrl = https.getLocation();
@@ -457,7 +456,7 @@ String GETTask(String url, const uint8_t Fingeprint[20], uint32_t neededHeap)
       if (httpCode == HTTP_CODE_OK || httpCode == HTTP_CODE_MOVED_PERMANENTLY)
       {
         String payload = https.getString();
-        Serial.println(payload);
+        USE_SERIAL.println(payload);
         https.end();
 
         return payload;
@@ -465,8 +464,8 @@ String GETTask(String url, const uint8_t Fingeprint[20], uint32_t neededHeap)
     }
     else
     {
-      Serial.print(F("[HTTPS] GET... failed, error: "));
-      Serial.println(httpCode);
+      USE_SERIAL.print(F("[HTTPS] GET... failed, error: "));
+      USE_SERIAL.println(httpCode);
       https.end();
       return "";
     }
@@ -475,25 +474,24 @@ String GETTask(String url, const uint8_t Fingeprint[20], uint32_t neededHeap)
   }
   else
   {
-    Serial.println(F("[HTTPS] Unable to connect"));
+    USE_SERIAL.println(F("[HTTPS] Unable to connect"));
     return "";
   }
   return "";
-};
+}
 
-String POSTTask(String url, const uint8_t Fingeprint[20], String payload)
+String POSTTask(String url, String payload)
 {
   std::unique_ptr<BearSSL::WiFiClientSecure> client(new BearSSL::WiFiClientSecure);
   client->setInsecure();
   HTTPClient https;
   if (https.begin(*client, url))
   {
-    Serial.print(F("[HTTPS] POST "));
-    Serial.print(url);
-    Serial.print(" --> ");
-    Serial.println(payload);
+    USE_SERIAL.print(F("[HTTPS] POST "));
+    USE_SERIAL.print(url);
+    USE_SERIAL.print(" --> ");
+    USE_SERIAL.println(payload);
     https.addHeader(F("Content-Type"), F("application/json"));
-    https.setFollowRedirects(true);
 
     int httpCode = https.POST(payload);
 
@@ -501,8 +499,8 @@ String POSTTask(String url, const uint8_t Fingeprint[20], String payload)
     if (httpCode > 0)
     {
       // HTTP header has been send and Server response header has been handled
-      Serial.print(F("[HTTPS] POST... code: "));
-      Serial.println(httpCode);
+      USE_SERIAL.print(F("[HTTPS] POST... code: "));
+      USE_SERIAL.println(httpCode);
 
       // file found at server
       if (httpCode == HTTP_CODE_OK || httpCode == HTTP_CODE_MOVED_PERMANENTLY)
@@ -514,8 +512,8 @@ String POSTTask(String url, const uint8_t Fingeprint[20], String payload)
     }
     else
     {
-      Serial.print(F("[HTTPS] POST... failed, error: "));
-      Serial.println(httpCode);
+      USE_SERIAL.print(F("[HTTPS] POST... failed, error: "));
+      USE_SERIAL.println(httpCode);
       https.end();
       return "";
     }
@@ -524,162 +522,304 @@ String POSTTask(String url, const uint8_t Fingeprint[20], String payload)
   }
   else
   {
-    Serial.println(F("[HTTPS] Unable to connect"));
+    USE_SERIAL.println(F("[HTTPS] Unable to connect"));
     return "";
   }
   return "";
-};
+}
 
 ////////////HTTP  ////////////////////////////
 //////////////////////////////////////////////
 
 //////////////////////////////////////////////
-////////////GETCONFIG/////////////////////////
+////////////GETDATA FROM INFLUXDB/////////////
 
-const size_t capacity = JSON_OBJECT_SIZE(13) + 950;
-DynamicJsonDocument doc(capacity);
-
-void getdataUhazInkub() //az inkub most a telikertben van
+void getdataUhazInkub()
 {
-  String baseurl = String(F("https://script.google.com/macros/s/")) + String(GScriptId) + "/exec?";
+  USE_SERIAL.println("Getting data for Uhaz and Inkub from InfluxDB...");
 
-  String params = String("uhaz_homerseklet=0&uhaz_last_on=0&uhaz_futes=0")+ "&" + String("noszlop_telikert_hutes_homerseklet=0&noszlop_telikert_hutes_last_on=0&noszlop_telikert_hutes_futes=0");
-
-  String url = baseurl + params;
-  String response = GETTask(url, Googlefingerprint, 1200);
-  network_timeout++;
-  if (response.length() > 1)
+  // Check InfluxDB connection
+  if (!influx_client.validateConnection())
   {
-    network_timeout = 0;
-    deserializeJson(doc, response);
-
-    uhaz_homerseklet = doc["uhaz_homerseklet"];
-    uhaz_last_on = doc["uhaz_last_on"];
-    uhaz_futes = doc["uhaz_futes"];
-
-    inkub_homerseklet = doc["noszlop_telikert_hutes_homerseklet"];
-    inkub_last_on = doc["noszlop_telikert_hutes_last_on"];
-    inkub_futes = doc["noszlop_telikert_hutes_futes"];
-
-    Serial.println("data got:");
-
-    Serial.println("uhaz_homerseklet =" + String(uhaz_homerseklet));
-    Serial.println("uhaz_last_on =" + String(uhaz_last_on));
-    Serial.println("uhaz_futes =" + String(uhaz_futes));
-
-    Serial.println("inkub_homerseklet =" + String(inkub_homerseklet));
-    Serial.println("inkub_last_on =" + String(inkub_last_on));
-    Serial.println("inkub_futes =" + String(inkub_futes));
+    USE_SERIAL.print("InfluxDB connection failed: ");
+    USE_SERIAL.println(influx_client.getLastErrorMessage());
+    network_timeout++;
+    return;
   }
+
+  // Query for uhaz_homerseklet (from uhaz device)
+  String query = "from(bucket: \"noszlop\") |> range(start: -1h) |> filter(fn: (r) => r.name == \"uhaz\" and r._field == \"temp\") |> last()";
+  FluxQueryResult result = influx_client.query(query);
+  if (result.next())
+  {
+    uhaz_homerseklet = result.getValueByName("_value").getDouble();
+    // Calculate time difference in seconds
+    String timeStr = result.getValueByName("_time").getString();
+    uhaz_last_on = 0; // You may want to calculate the actual time difference
+    USE_SERIAL.println("uhaz_homerseklet = " + String(uhaz_homerseklet));
+  }
+  result.close();
+
+  // Query for uhaz_futes (heating status)
+  query = "from(bucket: \"noszlop\") |> range(start: -1h) |> filter(fn: (r) => r.name == \"uhaz\" and r._field == \"event\" and (r._value == \"Heater start\" or r._value == \"Heater stop\")) |> last()";
+  result = influx_client.query(query);
+  if (result.next())
+  {
+    String event = result.getValueByName("_value").getString();
+    uhaz_futes = (event == "Heater start") ? 1 : 0;
+    USE_SERIAL.println("uhaz_futes = " + String(uhaz_futes));
+  }
+  result.close();
+
+  // Query for inkub (telikert_hutes device)
+  query = "from(bucket: \"noszlop\") |> range(start: -1h) |> filter(fn: (r) => r.name == \"noszlop_telikert_hutes\" and r._field == \"temp\") |> last()";
+  result = influx_client.query(query);
+  if (result.next())
+  {
+    inkub_homerseklet = result.getValueByName("_value").getDouble();
+    inkub_last_on = 0;
+    USE_SERIAL.println("inkub_homerseklet = " + String(inkub_homerseklet));
+  }
+  result.close();
+
+  // Query for inkub_futes
+  query = "from(bucket: \"noszlop\") |> range(start: -1h) |> filter(fn: (r) => r.name == \"noszlop_telikert_hutes\" and r._field == \"event\" and (r._value == \"Heater start\" or r._value == \"Heater stop\")) |> last()";
+  result = influx_client.query(query);
+  if (result.next())
+  {
+    String event = result.getValueByName("_value").getString();
+    inkub_futes = (event == "Heater start") ? 1 : 0;
+    USE_SERIAL.println("inkub_futes = " + String(inkub_futes));
+  }
+  result.close();
+
+  network_timeout = 0;
 }
 
 void getdataCsir()
 {
-  String baseurl = String(F("https://script.google.com/macros/s/")) + String(GScriptId) + "/exec?";
+  USE_SERIAL.println("Getting data for Csir from InfluxDB...");
 
-  String params = "csir_homerseklet=0&csir_last_on=0&csir_futes=0";
-
-  String url = baseurl + params;
-  String response = GETTask(url, Googlefingerprint, 1200);
-  network_timeout++;
-  if (response.length() > 1)
+  if (!influx_client.validateConnection())
   {
-    network_timeout = 0;
-    deserializeJson(doc, response);
-
-    csir_homerseklet = doc["csir_homerseklet"];
-    csir_last_on = doc["csir_last_on"];
-    csir_futes = doc["csir_futes"];
-
-    Serial.println("data got:");
-
-    Serial.println("csir_homerseklet =" + String(csir_homerseklet));
-    Serial.println("csir_last_on =" + String(csir_last_on));
-    Serial.println("csir_futes =" + String(csir_futes));
+    USE_SERIAL.print("InfluxDB connection failed: ");
+    USE_SERIAL.println(influx_client.getLastErrorMessage());
+    network_timeout++;
+    return;
   }
+
+  // Query for csir_homerseklet
+  String query = "from(bucket: \"noszlop\") |> range(start: -1h) |> filter(fn: (r) => r.name == \"csir\" and r._field == \"temp\") |> last()";
+  FluxQueryResult result = influx_client.query(query);
+  if (result.next())
+  {
+    csir_homerseklet = result.getValueByName("_value").getDouble();
+    csir_last_on = 0;
+    USE_SERIAL.println("csir_homerseklet = " + String(csir_homerseklet));
+  }
+  result.close();
+
+  // Query for csir_futes
+  query = "from(bucket: \"noszlop\") |> range(start: -1h) |> filter(fn: (r) => r.name == \"csir\" and r._field == \"event\" and (r._value == \"Heater start\" or r._value == \"Heater stop\")) |> last()";
+  result = influx_client.query(query);
+  if (result.next())
+  {
+    String event = result.getValueByName("_value").getString();
+    csir_futes = (event == "Heater start") ? 1 : 0;
+    USE_SERIAL.println("csir_futes = " + String(csir_futes));
+  }
+  result.close();
+
+  network_timeout = 0;
 }
 
 void getdataTelikert()
 {
-  String baseurl = String(F("https://script.google.com/macros/s/")) + String(GScriptId) + "/exec?";
+  USE_SERIAL.println("Getting data for Telikert from InfluxDB...");
 
-  String params = "telikert_homerseklet=0&telikert_last_on=0&telikert_futes=0";
-
-  String url = baseurl + params;
-  String response = GETTask(url, Googlefingerprint, 1200);
-  network_timeout++;
-  if (response.length() > 1)
+  if (!influx_client.validateConnection())
   {
-    network_timeout = 0;
-    deserializeJson(doc, response);
-
-    telikert_homerseklet = doc["telikert_homerseklet"];
-    telikert_last_on = doc["telikert_last_on"];
-    telikert_futes = doc["telikert_futes"];
-
-    Serial.println("data got:");
-    Serial.println("telikert_homerseklet =" + String(telikert_homerseklet));
-    Serial.println("telikert_last_on =" + String(telikert_last_on));
-    Serial.println("telikert_futes =" + String(telikert_futes));
-
+    USE_SERIAL.print("InfluxDB connection failed: ");
+    USE_SERIAL.println(influx_client.getLastErrorMessage());
+    network_timeout++;
+    return;
   }
+
+  // Query for telikert_homerseklet
+  String query = "from(bucket: \"noszlop\") |> range(start: -1h) |> filter(fn: (r) => r.name == \"telikert\" and r._field == \"temp\") |> last()";
+  FluxQueryResult result = influx_client.query(query);
+  if (result.next())
+  {
+    telikert_homerseklet = result.getValueByName("_value").getDouble();
+    telikert_last_on = 0;
+    USE_SERIAL.println("telikert_homerseklet = " + String(telikert_homerseklet));
+  }
+  result.close();
+
+  // Query for telikert_futes
+  query = "from(bucket: \"noszlop\") |> range(start: -1h) |> filter(fn: (r) => r.name == \"telikert\" and r._field == \"event\" and (r._value == \"Heater start\" or r._value == \"Heater stop\")) |> last()";
+  result = influx_client.query(query);
+  if (result.next())
+  {
+    String event = result.getValueByName("_value").getString();
+    telikert_futes = (event == "Heater start") ? 1 : 0;
+    USE_SERIAL.println("telikert_futes = " + String(telikert_futes));
+  }
+  result.close();
+
+  network_timeout = 0;
 }
 
+//////////////////////////////////////////////
+////////////GETCONFIG FROM INFLUXDB///////////
 
 void getconfig()
 {
-  String baseurl = String(F("https://script.google.com/macros/s/")) + String(GScriptId) + "/exec?";
+  /*
+  The config data is retrieved from InfluxDB bucket 'noszlop'.
+  We query for the latest config values using the device name as a tag filter.
+  Config values are stored as separate fields in the 'config' measurement.
+  */
+  
+  USE_SERIAL.println("Getting config from InfluxDB...");
 
-  String params = "update_interval=0&pinginterval=0&csir_timeout=0&telikert_timeout=0&noszlop_uveghaz_alarm=0&uhaz_timeout=0&inkub_alarm_on=0&uhaz_alarm_on=0&csir_alarm_on=0&telikert_alarm_on=0";
-
-  String url = baseurl + params;
-  String response = GETTask(url, Googlefingerprint, 1200);
-
-  if (response.length() > 1)
+  // Check InfluxDB connection
+  if (!influx_client.validateConnection())
   {
-    deserializeJson(doc, response);
-    noszlop_uveghaz_alarm = doc["noszlop_uveghaz_alarm"];
-    pinginterval = doc["pinginterval"];
-    update_interval = doc["update_interval"];
-    csir_timeout = doc["csir_timeout"];
-    uhaz_timeout = doc["uhaz_timeout"];
-    uhaz_timeout = doc["telikert_timeout"];
-
-    inkub_alarm_on = doc["inkub_alarm_on"];
-    csir_alarm_on = doc["csir_alarm_on"];
-    uhaz_alarm_on = doc["uhaz_alarm_on"];
-    telikert_alarm_on = doc["telikert_alarm_on"];
-
-    Serial.println("Config got:");
-    Serial.println("noszlop_uveghaz_alarm =" + String(noszlop_uveghaz_alarm));
-    Serial.println("pinginterval =" + String(pinginterval));
-    Serial.println("update_interval =" + String(update_interval));
-    Serial.println("csir_timeout =" + String(csir_timeout));
-    Serial.println("uhaz_timeout =" + String(uhaz_timeout));
-    Serial.println("inkub_alarm_on =" + String(inkub_alarm_on));
-    Serial.println("csir_alarm_on =" + String(csir_alarm_on));
-    Serial.println("uhaz_alarm_on =" + String(uhaz_alarm_on));
+    USE_SERIAL.print("InfluxDB connection failed: ");
+    USE_SERIAL.println(influx_client.getLastErrorMessage());
+    return;
   }
-}
+  
+  // Query for pinginterval
+  String query = "from(bucket: \"noszlop\") |> range(start: -10y) |> filter(fn: (r) => r._measurement == \"config\" and r.name == \"" + name + "\" and r._field == \"pinginterval\") |> last()";
+  FluxQueryResult result = influx_client.query(query);
+  if (result.next())
+  {
+    pinginterval = result.getValueByName("_value").getLong();
+    USE_SERIAL.println("Config got pinginterval = " + String(pinginterval));
+  }
+  result.close();
+  
+  // Query for update_interval
+  query = "from(bucket: \"noszlop\") |> range(start: -10y) |> filter(fn: (r) => r._measurement == \"config\" and r.name == \"" + name + "\" and r._field == \"update_interval\") |> last()";
+  result = influx_client.query(query);
+  if (result.next())
+  {
+    update_interval = result.getValueByName("_value").getLong();
+    USE_SERIAL.println("Config got update_interval = " + String(update_interval));
+  }
+  result.close();
+  
+  // Query for csir_timeout
+  query = "from(bucket: \"noszlop\") |> range(start: -10y) |> filter(fn: (r) => r._measurement == \"config\" and r.name == \"" + name + "\" and r._field == \"csir_timeout\") |> last()";
+  result = influx_client.query(query);
+  if (result.next())
+  {
+    csir_timeout = result.getValueByName("_value").getLong();
+    USE_SERIAL.println("Config got csir_timeout = " + String(csir_timeout));
+  }
+  result.close();
+  
+  // Query for uhaz_timeout
+  query = "from(bucket: \"noszlop\") |> range(start: -10y) |> filter(fn: (r) => r._measurement == \"config\" and r.name == \"" + name + "\" and r._field == \"uhaz_timeout\") |> last()";
+  result = influx_client.query(query);
+  if (result.next())
+  {
+    uhaz_timeout = result.getValueByName("_value").getLong();
+    USE_SERIAL.println("Config got uhaz_timeout = " + String(uhaz_timeout));
+  }
+  result.close();
+  
+  // Query for inkub_timeout
+  query = "from(bucket: \"noszlop\") |> range(start: -10y) |> filter(fn: (r) => r._measurement == \"config\" and r.name == \"" + name + "\" and r._field == \"inkub_timeout\") |> last()";
+  result = influx_client.query(query);
+  if (result.next())
+  {
+    inkub_timeout = result.getValueByName("_value").getLong();
+    USE_SERIAL.println("Config got inkub_timeout = " + String(inkub_timeout));
+  }
+  result.close();
+  
+  // Query for telikert_timeout
+  query = "from(bucket: \"noszlop\") |> range(start: -10y) |> filter(fn: (r) => r._measurement == \"config\" and r.name == \"" + name + "\" and r._field == \"telikert_timeout\") |> last()";
+  result = influx_client.query(query);
+  if (result.next())
+  {
+    telikert_timeout = result.getValueByName("_value").getLong();
+    USE_SERIAL.println("Config got telikert_timeout = " + String(telikert_timeout));
+  }
+  result.close();
+  
+  // Query for noszlop_uveghaz_alarm
+  query = "from(bucket: \"noszlop\") |> range(start: -10y) |> filter(fn: (r) => r._measurement == \"config\" and r.name == \"" + name + "\" and r._field == \"noszlop_uveghaz_alarm\") |> last()";
+  result = influx_client.query(query);
+  if (result.next())
+  {
+    noszlop_uveghaz_alarm = result.getValueByName("_value").getDouble();
+    USE_SERIAL.println("Config got noszlop_uveghaz_alarm = " + String(noszlop_uveghaz_alarm));
+  }
+  result.close();
+  
+  // Query for noszlop_inkub_alarm
+  query = "from(bucket: \"noszlop\") |> range(start: -10y) |> filter(fn: (r) => r._measurement == \"config\" and r.name == \"" + name + "\" and r._field == \"noszlop_inkub_alarm\") |> last()";
+  result = influx_client.query(query);
+  if (result.next())
+  {
+    noszlop_inkub_alarm = result.getValueByName("_value").getDouble();
+    USE_SERIAL.println("Config got noszlop_inkub_alarm = " + String(noszlop_inkub_alarm));
+  }
+  result.close();
+  
+  // Query for noszlop_telikert_alarm
+  query = "from(bucket: \"noszlop\") |> range(start: -10y) |> filter(fn: (r) => r._measurement == \"config\" and r.name == \"" + name + "\" and r._field == \"noszlop_telikert_alarm\") |> last()";
+  result = influx_client.query(query);
+  if (result.next())
+  {
+    noszlop_telikert_alarm = result.getValueByName("_value").getDouble();
+    USE_SERIAL.println("Config got noszlop_telikert_alarm = " + String(noszlop_telikert_alarm));
+  }
+  result.close();
 
-////////////GETCONFIG/////////////////////////
-//////////////////////////////////////////////
-void HeapPrintTask()
-{
-  /* lcd.setCursor(0, 2);
-    lcd.print("                                        ");
-    lcd.setCursor(0, 2);
-    lcd.print("Free heap: ");
-    lcd.print(ESP.getFreeHeap());*/
+  // Query for csir_alarm_on
+  query = "from(bucket: \"noszlop\") |> range(start: -10y) |> filter(fn: (r) => r._measurement == \"config\" and r.name == \"" + name + "\" and r._field == \"csir_alarm_on\") |> last()";
+  result = influx_client.query(query);
+  if (result.next())
+  {
+    csir_alarm_on = result.getValueByName("_value").getBool();
+    USE_SERIAL.println("Config got csir_alarm_on = " + String(csir_alarm_on));
+  }
+  result.close();
 
-  // we could use getFreeHeap() getMaxFreeBlockSize() and getHeapFragmentation()
-  // or all at once:
-  uint32_t free;
-  uint16_t max;
-  uint8_t frag;
-  ESP.getHeapStats(&free, &max, &frag);
-  float freepercent = free;
-  freepercent = freepercent / 81920 * 100;
-  Serial.printf("free: %5d - max: %5d - freepercent: %2.1f%% - frag: %3d%% <- ", free, max, freepercent, frag);
-  Serial.println();
+  // Query for uhaz_alarm_on
+  query = "from(bucket: \"noszlop\") |> range(start: -10y) |> filter(fn: (r) => r._measurement == \"config\" and r.name == \"" + name + "\" and r._field == \"uhaz_alarm_on\") |> last()";
+  result = influx_client.query(query);
+  if (result.next())
+  {
+    uhaz_alarm_on = result.getValueByName("_value").getBool();
+    USE_SERIAL.println("Config got uhaz_alarm_on = " + String(uhaz_alarm_on));
+  }
+  result.close();
+
+  // Query for inkub_alarm_on
+  query = "from(bucket: \"noszlop\") |> range(start: -10y) |> filter(fn: (r) => r._measurement == \"config\" and r.name == \"" + name + "\" and r._field == \"inkub_alarm_on\") |> last()";
+  result = influx_client.query(query);
+  if (result.next())
+  {
+    inkub_alarm_on = result.getValueByName("_value").getBool();
+    USE_SERIAL.println("Config got inkub_alarm_on = " + String(inkub_alarm_on));
+  }
+  result.close();
+
+  // Query for telikert_alarm_on
+  query = "from(bucket: \"noszlop\") |> range(start: -10y) |> filter(fn: (r) => r._measurement == \"config\" and r.name == \"" + name + "\" and r._field == \"telikert_alarm_on\") |> last()";
+  result = influx_client.query(query);
+  if (result.next())
+  {
+    telikert_alarm_on = result.getValueByName("_value").getBool();
+    USE_SERIAL.println("Config got telikert_alarm_on = " + String(telikert_alarm_on));
+  }
+  result.close();
+
+  USE_SERIAL.println("Config retrieval completed from InfluxDB");
 }
