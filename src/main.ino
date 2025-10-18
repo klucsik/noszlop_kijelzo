@@ -122,10 +122,9 @@ void setup()
     USE_SERIAL.print("discord.com resolved to: ");
     USE_SERIAL.println(testIP);
   } else {
-    USE_SERIAL.println("DNS resolution failed for discord.com! Set DNS to google ones");
-    // Set custom DNS servers (Google DNS) to fix DNS resolution issues
-    // Primary: 8.8.8.8, Secondary: 8.8.4.4
-    IPAddress dns1(8, 8, 8, 8);
+    USE_SERIAL.println("DNS resolution failed for discord.com! Set DNS to 1.1.1.1");
+    // Set custom DNS servers (Cloudflare DNS) to fix DNS resolution issues
+    IPAddress dns1(1, 1, 1, 1);
     IPAddress dns2(1, 1, 1, 1);
     WiFi.config(WiFi.localIP(), WiFi.gatewayIP(), WiFi.subnetMask(), dns1, dns2);
     if (WiFi.hostByName("discord.com", testIP)) {
