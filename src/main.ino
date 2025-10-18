@@ -534,144 +534,131 @@ String POSTTask(String url, String payload)
 //////////////////////////////////////////////
 ////////////GETDATA FROM INFLUXDB/////////////
 
-void getdataUhazInkub()
+// Helper function to query temperature from InfluxDB
+bool queryTemperature(String deviceName, float &temperature, int &lastOn)
 {
-  USE_SERIAL.println("Getting data for Uhaz and Inkub from InfluxDB...");
+  String query = "from(bucket: \"noszlop\") |> range(start: -1h) |> filter(fn: (r) => r.name == \"" + deviceName + "\" and r._field == \"temp\") |> last()";
+  FluxQueryResult result = influx_client.query(query);
+  
+  if (result.next())
+  {
+    temperature = result.getValueByName("_value").getDouble();
+    lastOn = 0; // You may want to calculate the actual time difference
+    USE_SERIAL.println(deviceName + " temperature = " + String(temperature));
+    result.close();
+    return true;
+  }
+  result.close();
+  return false;
+}
 
-  // Check InfluxDB connection
+// Helper function to query heating status from InfluxDB
+bool queryHeatingStatus(String deviceName, int &heatingStatus)
+{
+  String query = "from(bucket: \"noszlop\") |> range(start: -1h) |> filter(fn: (r) => r.name == \"" + deviceName + "\" and r._field == \"event\" and (r._value == \"Heater start\" or r._value == \"Heater stop\")) |> last()";
+  FluxQueryResult result = influx_client.query(query);
+  
+  if (result.next())
+  {
+    String event = result.getValueByName("_value").getString();
+    heatingStatus = (event == "Heater start") ? 1 : 0;
+    USE_SERIAL.println(deviceName + " heating = " + String(heatingStatus));
+    result.close();
+    return true;
+  }
+  result.close();
+  return false;
+}
+
+// Helper function to get device data (temperature and heating status)
+bool getDeviceData(String deviceName, float &temperature, int &lastOn, int &heatingStatus)
+{
   if (!influx_client.validateConnection())
   {
     USE_SERIAL.print("InfluxDB connection failed: ");
     USE_SERIAL.println(influx_client.getLastErrorMessage());
     network_timeout++;
-    return;
+    return false;
   }
 
-  // Query for uhaz_homerseklet (from uhaz device)
-  String query = "from(bucket: \"noszlop\") |> range(start: -1h) |> filter(fn: (r) => r.name == \"uhaz\" and r._field == \"temp\") |> last()";
-  FluxQueryResult result = influx_client.query(query);
-  if (result.next())
-  {
-    uhaz_homerseklet = result.getValueByName("_value").getDouble();
-    // Calculate time difference in seconds
-    String timeStr = result.getValueByName("_time").getString();
-    uhaz_last_on = 0; // You may want to calculate the actual time difference
-    USE_SERIAL.println("uhaz_homerseklet = " + String(uhaz_homerseklet));
-  }
-  result.close();
-
-  // Query for uhaz_futes (heating status)
-  query = "from(bucket: \"noszlop\") |> range(start: -1h) |> filter(fn: (r) => r.name == \"uhaz\" and r._field == \"event\" and (r._value == \"Heater start\" or r._value == \"Heater stop\")) |> last()";
-  result = influx_client.query(query);
-  if (result.next())
-  {
-    String event = result.getValueByName("_value").getString();
-    uhaz_futes = (event == "Heater start") ? 1 : 0;
-    USE_SERIAL.println("uhaz_futes = " + String(uhaz_futes));
-  }
-  result.close();
-
-  // Query for inkub (telikert_hutes device)
-  query = "from(bucket: \"noszlop\") |> range(start: -1h) |> filter(fn: (r) => r.name == \"noszlop_telikert_hutes\" and r._field == \"temp\") |> last()";
-  result = influx_client.query(query);
-  if (result.next())
-  {
-    inkub_homerseklet = result.getValueByName("_value").getDouble();
-    inkub_last_on = 0;
-    USE_SERIAL.println("inkub_homerseklet = " + String(inkub_homerseklet));
-  }
-  result.close();
-
-  // Query for inkub_futes
-  query = "from(bucket: \"noszlop\") |> range(start: -1h) |> filter(fn: (r) => r.name == \"noszlop_telikert_hutes\" and r._field == \"event\" and (r._value == \"Heater start\" or r._value == \"Heater stop\")) |> last()";
-  result = influx_client.query(query);
-  if (result.next())
-  {
-    String event = result.getValueByName("_value").getString();
-    inkub_futes = (event == "Heater start") ? 1 : 0;
-    USE_SERIAL.println("inkub_futes = " + String(inkub_futes));
-  }
-  result.close();
-
+  queryTemperature(deviceName, temperature, lastOn);
+  queryHeatingStatus(deviceName, heatingStatus);
   network_timeout = 0;
+  return true;
+}
+
+void getdataUhazInkub()
+{
+  USE_SERIAL.println("Getting data for Uhaz and Inkub from InfluxDB...");
+  getDeviceData("uhaz", uhaz_homerseklet, uhaz_last_on, uhaz_futes);
+  getDeviceData("noszlop_telikert_hutes", inkub_homerseklet, inkub_last_on, inkub_futes);
 }
 
 void getdataCsir()
 {
   USE_SERIAL.println("Getting data for Csir from InfluxDB...");
-
-  if (!influx_client.validateConnection())
-  {
-    USE_SERIAL.print("InfluxDB connection failed: ");
-    USE_SERIAL.println(influx_client.getLastErrorMessage());
-    network_timeout++;
-    return;
-  }
-
-  // Query for csir_homerseklet
-  String query = "from(bucket: \"noszlop\") |> range(start: -1h) |> filter(fn: (r) => r.name == \"csir\" and r._field == \"temp\") |> last()";
-  FluxQueryResult result = influx_client.query(query);
-  if (result.next())
-  {
-    csir_homerseklet = result.getValueByName("_value").getDouble();
-    csir_last_on = 0;
-    USE_SERIAL.println("csir_homerseklet = " + String(csir_homerseklet));
-  }
-  result.close();
-
-  // Query for csir_futes
-  query = "from(bucket: \"noszlop\") |> range(start: -1h) |> filter(fn: (r) => r.name == \"csir\" and r._field == \"event\" and (r._value == \"Heater start\" or r._value == \"Heater stop\")) |> last()";
-  result = influx_client.query(query);
-  if (result.next())
-  {
-    String event = result.getValueByName("_value").getString();
-    csir_futes = (event == "Heater start") ? 1 : 0;
-    USE_SERIAL.println("csir_futes = " + String(csir_futes));
-  }
-  result.close();
-
-  network_timeout = 0;
+  getDeviceData("csir", csir_homerseklet, csir_last_on, csir_futes);
 }
 
 void getdataTelikert()
 {
   USE_SERIAL.println("Getting data for Telikert from InfluxDB...");
-
-  if (!influx_client.validateConnection())
-  {
-    USE_SERIAL.print("InfluxDB connection failed: ");
-    USE_SERIAL.println(influx_client.getLastErrorMessage());
-    network_timeout++;
-    return;
-  }
-
-  // Query for telikert_homerseklet
-  String query = "from(bucket: \"noszlop\") |> range(start: -1h) |> filter(fn: (r) => r.name == \"telikert\" and r._field == \"temp\") |> last()";
-  FluxQueryResult result = influx_client.query(query);
-  if (result.next())
-  {
-    telikert_homerseklet = result.getValueByName("_value").getDouble();
-    telikert_last_on = 0;
-    USE_SERIAL.println("telikert_homerseklet = " + String(telikert_homerseklet));
-  }
-  result.close();
-
-  // Query for telikert_futes
-  query = "from(bucket: \"noszlop\") |> range(start: -1h) |> filter(fn: (r) => r.name == \"telikert\" and r._field == \"event\" and (r._value == \"Heater start\" or r._value == \"Heater stop\")) |> last()";
-  result = influx_client.query(query);
-  if (result.next())
-  {
-    String event = result.getValueByName("_value").getString();
-    telikert_futes = (event == "Heater start") ? 1 : 0;
-    USE_SERIAL.println("telikert_futes = " + String(telikert_futes));
-  }
-  result.close();
-
-  network_timeout = 0;
+  getDeviceData("telikert", telikert_homerseklet, telikert_last_on, telikert_futes);
 }
 
 //////////////////////////////////////////////
 ////////////GETCONFIG FROM INFLUXDB///////////
+
+// Helper function to query config value (long/int)
+bool queryConfigLong(String fieldName, long &value)
+{
+  String query = "from(bucket: \"noszlop\") |> range(start: -10y) |> filter(fn: (r) => r._measurement == \"config\" and r.name == \"" + name + "\" and r._field == \"" + fieldName + "\") |> last()";
+  FluxQueryResult result = influx_client.query(query);
+  
+  if (result.next())
+  {
+    value = result.getValueByName("_value").getLong();
+    USE_SERIAL.println("Config got " + fieldName + " = " + String(value));
+    result.close();
+    return true;
+  }
+  result.close();
+  return false;
+}
+
+// Helper function to query config value (double/float)
+bool queryConfigDouble(String fieldName, float &value)
+{
+  String query = "from(bucket: \"noszlop\") |> range(start: -10y) |> filter(fn: (r) => r._measurement == \"config\" and r.name == \"" + name + "\" and r._field == \"" + fieldName + "\") |> last()";
+  FluxQueryResult result = influx_client.query(query);
+  
+  if (result.next())
+  {
+    value = result.getValueByName("_value").getDouble();
+    USE_SERIAL.println("Config got " + fieldName + " = " + String(value));
+    result.close();
+    return true;
+  }
+  result.close();
+  return false;
+}
+
+// Helper function to query config value (boolean)
+bool queryConfigBool(String fieldName, boolean &value)
+{
+  String query = "from(bucket: \"noszlop\") |> range(start: -10y) |> filter(fn: (r) => r._measurement == \"config\" and r.name == \"" + name + "\" and r._field == \"" + fieldName + "\") |> last()";
+  FluxQueryResult result = influx_client.query(query);
+  
+  if (result.next())
+  {
+    value = result.getValueByName("_value").getBool();
+    USE_SERIAL.println("Config got " + fieldName + " = " + String(value));
+    result.close();
+    return true;
+  }
+  result.close();
+  return false;
+}
 
 void getconfig()
 {
@@ -691,135 +678,38 @@ void getconfig()
     return;
   }
   
-  // Query for pinginterval
-  String query = "from(bucket: \"noszlop\") |> range(start: -10y) |> filter(fn: (r) => r._measurement == \"config\" and r.name == \"" + name + "\" and r._field == \"pinginterval\") |> last()";
-  FluxQueryResult result = influx_client.query(query);
-  if (result.next())
-  {
-    pinginterval = result.getValueByName("_value").getLong();
-    USE_SERIAL.println("Config got pinginterval = " + String(pinginterval));
-  }
-  result.close();
+  // Query integer/long config values
+  long pinginterval_temp = pinginterval;
+  long update_interval_temp = update_interval;
+  long csir_timeout_temp = csir_timeout;
+  long uhaz_timeout_temp = uhaz_timeout;
+  long inkub_timeout_temp = inkub_timeout;
+  long telikert_timeout_temp = telikert_timeout;
   
-  // Query for update_interval
-  query = "from(bucket: \"noszlop\") |> range(start: -10y) |> filter(fn: (r) => r._measurement == \"config\" and r.name == \"" + name + "\" and r._field == \"update_interval\") |> last()";
-  result = influx_client.query(query);
-  if (result.next())
-  {
-    update_interval = result.getValueByName("_value").getLong();
-    USE_SERIAL.println("Config got update_interval = " + String(update_interval));
-  }
-  result.close();
+  queryConfigLong("pinginterval", pinginterval_temp);
+  queryConfigLong("update_interval", update_interval_temp);
+  queryConfigLong("csir_timeout", csir_timeout_temp);
+  queryConfigLong("uhaz_timeout", uhaz_timeout_temp);
+  queryConfigLong("inkub_timeout", inkub_timeout_temp);
+  queryConfigLong("telikert_timeout", telikert_timeout_temp);
   
-  // Query for csir_timeout
-  query = "from(bucket: \"noszlop\") |> range(start: -10y) |> filter(fn: (r) => r._measurement == \"config\" and r.name == \"" + name + "\" and r._field == \"csir_timeout\") |> last()";
-  result = influx_client.query(query);
-  if (result.next())
-  {
-    csir_timeout = result.getValueByName("_value").getLong();
-    USE_SERIAL.println("Config got csir_timeout = " + String(csir_timeout));
-  }
-  result.close();
+  pinginterval = (int)pinginterval_temp;
+  update_interval = (int)update_interval_temp;
+  csir_timeout = (int)csir_timeout_temp;
+  uhaz_timeout = (int)uhaz_timeout_temp;
+  inkub_timeout = (int)inkub_timeout_temp;
+  telikert_timeout = (int)telikert_timeout_temp;
   
-  // Query for uhaz_timeout
-  query = "from(bucket: \"noszlop\") |> range(start: -10y) |> filter(fn: (r) => r._measurement == \"config\" and r.name == \"" + name + "\" and r._field == \"uhaz_timeout\") |> last()";
-  result = influx_client.query(query);
-  if (result.next())
-  {
-    uhaz_timeout = result.getValueByName("_value").getLong();
-    USE_SERIAL.println("Config got uhaz_timeout = " + String(uhaz_timeout));
-  }
-  result.close();
-  
-  // Query for inkub_timeout
-  query = "from(bucket: \"noszlop\") |> range(start: -10y) |> filter(fn: (r) => r._measurement == \"config\" and r.name == \"" + name + "\" and r._field == \"inkub_timeout\") |> last()";
-  result = influx_client.query(query);
-  if (result.next())
-  {
-    inkub_timeout = result.getValueByName("_value").getLong();
-    USE_SERIAL.println("Config got inkub_timeout = " + String(inkub_timeout));
-  }
-  result.close();
-  
-  // Query for telikert_timeout
-  query = "from(bucket: \"noszlop\") |> range(start: -10y) |> filter(fn: (r) => r._measurement == \"config\" and r.name == \"" + name + "\" and r._field == \"telikert_timeout\") |> last()";
-  result = influx_client.query(query);
-  if (result.next())
-  {
-    telikert_timeout = result.getValueByName("_value").getLong();
-    USE_SERIAL.println("Config got telikert_timeout = " + String(telikert_timeout));
-  }
-  result.close();
-  
-  // Query for noszlop_uveghaz_alarm
-  query = "from(bucket: \"noszlop\") |> range(start: -10y) |> filter(fn: (r) => r._measurement == \"config\" and r.name == \"" + name + "\" and r._field == \"noszlop_uveghaz_alarm\") |> last()";
-  result = influx_client.query(query);
-  if (result.next())
-  {
-    noszlop_uveghaz_alarm = result.getValueByName("_value").getDouble();
-    USE_SERIAL.println("Config got noszlop_uveghaz_alarm = " + String(noszlop_uveghaz_alarm));
-  }
-  result.close();
-  
-  // Query for noszlop_inkub_alarm
-  query = "from(bucket: \"noszlop\") |> range(start: -10y) |> filter(fn: (r) => r._measurement == \"config\" and r.name == \"" + name + "\" and r._field == \"noszlop_inkub_alarm\") |> last()";
-  result = influx_client.query(query);
-  if (result.next())
-  {
-    noszlop_inkub_alarm = result.getValueByName("_value").getDouble();
-    USE_SERIAL.println("Config got noszlop_inkub_alarm = " + String(noszlop_inkub_alarm));
-  }
-  result.close();
-  
-  // Query for noszlop_telikert_alarm
-  query = "from(bucket: \"noszlop\") |> range(start: -10y) |> filter(fn: (r) => r._measurement == \"config\" and r.name == \"" + name + "\" and r._field == \"noszlop_telikert_alarm\") |> last()";
-  result = influx_client.query(query);
-  if (result.next())
-  {
-    noszlop_telikert_alarm = result.getValueByName("_value").getDouble();
-    USE_SERIAL.println("Config got noszlop_telikert_alarm = " + String(noszlop_telikert_alarm));
-  }
-  result.close();
+  // Query float/double config values
+  queryConfigDouble("noszlop_uveghaz_alarm", noszlop_uveghaz_alarm);
+  queryConfigDouble("noszlop_inkub_alarm", noszlop_inkub_alarm);
+  queryConfigDouble("noszlop_telikert_alarm", noszlop_telikert_alarm);
 
-  // Query for csir_alarm_on
-  query = "from(bucket: \"noszlop\") |> range(start: -10y) |> filter(fn: (r) => r._measurement == \"config\" and r.name == \"" + name + "\" and r._field == \"csir_alarm_on\") |> last()";
-  result = influx_client.query(query);
-  if (result.next())
-  {
-    csir_alarm_on = result.getValueByName("_value").getBool();
-    USE_SERIAL.println("Config got csir_alarm_on = " + String(csir_alarm_on));
-  }
-  result.close();
-
-  // Query for uhaz_alarm_on
-  query = "from(bucket: \"noszlop\") |> range(start: -10y) |> filter(fn: (r) => r._measurement == \"config\" and r.name == \"" + name + "\" and r._field == \"uhaz_alarm_on\") |> last()";
-  result = influx_client.query(query);
-  if (result.next())
-  {
-    uhaz_alarm_on = result.getValueByName("_value").getBool();
-    USE_SERIAL.println("Config got uhaz_alarm_on = " + String(uhaz_alarm_on));
-  }
-  result.close();
-
-  // Query for inkub_alarm_on
-  query = "from(bucket: \"noszlop\") |> range(start: -10y) |> filter(fn: (r) => r._measurement == \"config\" and r.name == \"" + name + "\" and r._field == \"inkub_alarm_on\") |> last()";
-  result = influx_client.query(query);
-  if (result.next())
-  {
-    inkub_alarm_on = result.getValueByName("_value").getBool();
-    USE_SERIAL.println("Config got inkub_alarm_on = " + String(inkub_alarm_on));
-  }
-  result.close();
-
-  // Query for telikert_alarm_on
-  query = "from(bucket: \"noszlop\") |> range(start: -10y) |> filter(fn: (r) => r._measurement == \"config\" and r.name == \"" + name + "\" and r._field == \"telikert_alarm_on\") |> last()";
-  result = influx_client.query(query);
-  if (result.next())
-  {
-    telikert_alarm_on = result.getValueByName("_value").getBool();
-    USE_SERIAL.println("Config got telikert_alarm_on = " + String(telikert_alarm_on));
-  }
-  result.close();
+  // Query boolean config values
+  queryConfigBool("csir_alarm_on", csir_alarm_on);
+  queryConfigBool("uhaz_alarm_on", uhaz_alarm_on);
+  queryConfigBool("inkub_alarm_on", inkub_alarm_on);
+  queryConfigBool("telikert_alarm_on", telikert_alarm_on);
 
   USE_SERIAL.println("Config retrieval completed from InfluxDB");
 }
